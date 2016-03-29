@@ -9,7 +9,7 @@
   "homepage": "http://www.firepad.io/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/firebase/firepad.git"
+    "url": "https://github.com/presencelearning/firepad.git"
   },
   "browser": {
     "jsdom": false
