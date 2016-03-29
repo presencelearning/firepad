@@ -59,6 +59,7 @@
     "test": "grunt test",
     "travis": "grunt",
     "dev": "grunt watch",
-    "build": "grunt build"
+    "build": "grunt build",
+    "postinstall" : "grunt build"
   }
 }
