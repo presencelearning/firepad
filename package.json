@@ -32,12 +32,6 @@
     "collaborative"
   ],
   "main": "dist/firepad.js",
-  "files": [
-    "dist/**",
-    "LICENSE",
-    "README.md",
-    "package.json"
-  ],
   "dependencies": {
     "jsdom": ">3",
     "firebase": "2.x"
