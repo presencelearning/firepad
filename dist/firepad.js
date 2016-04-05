@@ -2906,15 +2906,21 @@ firepad.RichTextCodeMirror = (function () {
   // A cache of dynamically-created styles so we can re-use them.
   var StyleCache_ = {};
 
-  function RichTextCodeMirror(codeMirror, entityManager, options) {
+  function RichTextCodeMirror(codeMirror, entityManager, options, changeCallback) {
     this.codeMirror = codeMirror;
     this.options_ = options || { };
     this.entityManager_ = entityManager;
     this.currentAttributes_ = null;
+    this.changeCallback_ = changeCallback;
 
     var self = this;
     this.annotationList_ = new AnnotationList(
-        function(oldNodes, newNodes) { self.onAnnotationsChanged_(oldNodes, newNodes); });
+        function(oldNodes, newNodes) { 
+          self.onAnnotationsChanged_(oldNodes, newNodes); 
+          if (changeCallback) {
+            changeCallback();
+          }
+        });
 
     // Ensure annotationList is in sync with any existing codemirror contents.
     this.initAnnotationList_();
@@ -3362,6 +3368,11 @@ firepad.RichTextCodeMirror = (function () {
 
     // This probably shouldn't be necessary.  There must be a lurking CodeMirror bug.
     this.queueRefresh_();
+
+    //This is the end of the line for some kinds of changes that impact bullet formating and so needs a callback
+    if(this.changeCallback_) {
+      this.changeCallback_();
+    }
   };
 
   RichTextCodeMirror.prototype.queueRefresh_ = function() {
@@ -3528,6 +3539,11 @@ firepad.RichTextCodeMirror = (function () {
 
     if (newChanges.length > 0) {
       this.trigger('change', this, newChanges);
+    }
+
+    //callback parent to notify a change happened
+    if(this.changeCallback_) {
+      this.changeCallback_();
     }
   };
 
@@ -3715,6 +3731,11 @@ firepad.RichTextCodeMirror = (function () {
 
       // Reset deeper indents back to 1.
       listNumber = listNumber.slice(0, indent+1);
+
+      //This is the end of the line for some kinds of changes that impact bullet formating and so needs a callback
+      if(this.changeCallback_) {
+        this.changeCallback_();
+      }
     }
 
     // Create a marker to cover this series of sentinel characters.
@@ -3893,6 +3914,11 @@ firepad.RichTextCodeMirror = (function () {
           self.trigger('newLine', {line: cursorLine+1, attr: attributes});
         });
       }
+    }
+
+    //This is the end of the line for some kinds of changes that impact bullet formating and so needs a callback
+    if(this.changeCallback_) {
+      this.changeCallback_();
     }
   };
 
@@ -5410,9 +5436,36 @@ firepad.Firepad = (function(global) {
 
     this.entityManager_ = new EntityManager();
 
+    //respond to changes in the document to follow up Code Mirror
+    var changeCallback = function() {
+      fixBullets();
+    }
+
+    //Code Mirror fails to format bullet points in front of lists. When this is called, it searches 
+    //for 'CodeMirror-widget's, and then checks to see if any of them have a child element that is
+    //a 'firepad-list-left'. If so, it goes to the first sibling of the widget and if it has any
+    //classes, it applies those classes to the bullet. Hence, the bullet should pick up the font,
+    //size, and color of the first span of content that follows it.
+    var fixBullets = function() {
+      var widgets = document.getElementsByClassName('CodeMirror-widget');
+      for(var i = 0; i < widgets.length; i++) {
+        var bullets = widgets[i].getElementsByClassName('firepad-list-left');
+        if(bullets[0]) {
+          var sibling = widgets[i].nextSibling;
+          if(sibling && sibling.classList && sibling.classList.length>0) {
+            var siblingClasses = sibling.classList;
+            bullets[0].className = 'firepad-list-left';
+            for(var j=0; j<siblingClasses.length; j++) {
+              bullets[0].classList.add(siblingClasses[j]);
+            }
+          }
+        }
+      }
+    }
+
     this.firebaseAdapter_ = new FirebaseAdapter(ref, userId, userColor);
     if (this.codeMirror_) {
-      this.richTextCodeMirror_ = new RichTextCodeMirror(this.codeMirror_, this.entityManager_, { cssPrefix: 'firepad-' });
+      this.richTextCodeMirror_ = new RichTextCodeMirror(this.codeMirror_, this.entityManager_, { cssPrefix: 'firepad-' }, changeCallback);
       this.editorAdapter_ = new RichTextCodeMirrorAdapter(this.richTextCodeMirror_);
     } else {
       this.editorAdapter_ = new ACEAdapter(this.ace_);

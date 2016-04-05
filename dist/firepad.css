@@ -73,7 +73,7 @@
 
 .firepad-f-arial-black { font-family: "Arial Black", "Arial Bold", Gadget, sans-serif; }
 .firepad-f-georgia { font-family: Georgia, Times, "Times New Roman", serif; }
-.firepad-f-lucia-console { font-family: "Lucida Console", "Lucida Sans Typewriter", monaco, "Bitstream Vera Sans Mono", monospace; }
+.firepad-f-lucida-console { font-family: "Lucida Console", "Lucida Sans Typewriter", monaco, "Bitstream Vera Sans Mono", monospace; }
 .firepad-f-lucida-grande { font-family: "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", Geneva, Verdana, sans-serif; }
 .firepad-f-palatino { font-family: Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif; }
 .firepad-f-print-practice { font-family: "Print Practice", sans-serif; }
@@ -92,8 +92,6 @@ pre.firepad-lt-o, pre.firepad-lt-u, pre.firepad-lt-t, pre.firepad-lt-tc {
 
 .firepad-list-left {
   display:inline-block;
-  margin-left: -40px;
-  width: 40px;
   padding-right: 5px;
   text-align: right;
 }
