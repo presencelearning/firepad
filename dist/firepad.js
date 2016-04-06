@@ -1800,7 +1800,7 @@ firepad.RichTextToolbar = (function(global) {
   };
 
   RichTextToolbar.prototype.makeColorDropdown_ = function() {
-    var colors = ['black', 'red', 'green', 'blue', 'yellow', 'cyan', 'magenta', 'grey'];
+    var colors = ['#000000', '#747678', '#4D8BBE', '#85D4F7', '#D0021B', '#F9B417', '#78A240', '#B665A6', '#FF6C98'];
 
     var items = [];
     for(var i = 0; i < colors.length; i++) {
