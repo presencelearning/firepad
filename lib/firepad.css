@@ -24,7 +24,7 @@
 }
 
 .firepad-with-toolbar .CodeMirror-lines {
-  padding-top: 10px;
+  padding-top: 14px;
 }
 
 .firepad-toolbar {
@@ -55,6 +55,16 @@
 .firepad-spacer {
   height: 10px;
   width: 1px;
+}
+
+.firepad-cursor-label {
+  background-color: rgba(192, 192, 192, 1.0);
+  border-radius: 2px;
+  font-size: 12px;
+  z-index: 3;
+  padding: 2px;
+  position: absolute;
+  margin-top: -16px;
 }
 
 /** Styles for all of the rich-text formatting we support. */
