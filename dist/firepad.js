@@ -1329,7 +1329,7 @@ firepad.FirebaseAdapter = (function (global) {
   // Save a checkpoint every 100 edits.
   var CHECKPOINT_FREQUENCY = 100;
 
-  function FirebaseAdapter (ref, userId, userColor) {
+  function FirebaseAdapter (ref, userId, userColor, userDisplayName) {
     this.ref_ = ref;
     this.ready_ = false;
     this.firebaseCallbacks_ = [];
@@ -1355,6 +1355,7 @@ firepad.FirebaseAdapter = (function (global) {
     if (userId) {
       this.setUserId(userId);
       this.setColor(userColor);
+      this.setDisplayName(userDisplayName);
 
       this.firebaseOn_(ref.root().child('.info/connected'), 'value', function(snapshot) {
         if (snapshot.val() === true) {
@@ -1394,6 +1395,7 @@ firepad.FirebaseAdapter = (function (global) {
     if (this.userRef_) {
       this.userRef_.child('cursor').remove();
       this.userRef_.child('color').remove();
+      this.userRef_.child('displayName').remove();
     }
 
     this.ref_ = null;
@@ -1409,6 +1411,8 @@ firepad.FirebaseAdapter = (function (global) {
       this.userRef_.child('cursor').onDisconnect().cancel();
       this.userRef_.child('color').remove();
       this.userRef_.child('color').onDisconnect().cancel();
+      this.userRef_.child('displayName').remove();
+      this.userRef_.child('displayName').onDisconnect().cancel();
     }
 
     this.userId_ = userId;
@@ -1486,6 +1490,11 @@ firepad.FirebaseAdapter = (function (global) {
     this.color_ = color;
   };
 
+  FirebaseAdapter.prototype.setDisplayName = function(displayName) {
+    this.userRef_.child('displayName').set(displayName);
+    this.displayName_ = displayName;
+  };
+
   FirebaseAdapter.prototype.getDocument = function() {
     return this.document_;
   };
@@ -1499,9 +1508,11 @@ firepad.FirebaseAdapter = (function (global) {
   FirebaseAdapter.prototype.initializeUserData_ = function() {
     this.userRef_.child('cursor').onDisconnect().remove();
     this.userRef_.child('color').onDisconnect().remove();
+    this.userRef_.child('displayName').onDisconnect().remove();
 
     this.sendCursor(this.cursor_ || null);
     this.setColor(this.color_ || null);
+    this.setDisplayName(this.displayName_ || null);
   };
 
   FirebaseAdapter.prototype.monitorCursors_ = function() {
@@ -1510,7 +1521,7 @@ firepad.FirebaseAdapter = (function (global) {
     function childChanged(childSnap) {
       var userId = childSnap.key();
       var userData = childSnap.val();
-      self.trigger('cursor', userId, userData.cursor, userData.color);
+      self.trigger('cursor', userId, userData.cursor, userData.color, userData.displayName);
     }
 
     this.firebaseOn_(usersRef, 'child_added', childChanged);
@@ -2260,13 +2271,18 @@ firepad.EditorClient = (function () {
     this.color = color;
   };
 
+  OtherClient.prototype.setDisplayName = function (displayName) {
+    this.displayName = displayName;
+  };
+
   OtherClient.prototype.updateCursor = function (cursor) {
     this.removeCursor();
     this.cursor = cursor;
     this.mark = this.editorAdapter.setOtherCursor(
       cursor,
       this.color,
-      this.id
+      this.id, 
+      this.displayName
     );
   };
 
@@ -2293,6 +2309,17 @@ firepad.EditorClient = (function () {
     this.editorAdapter.registerUndo(function () { self.undo(); });
     this.editorAdapter.registerRedo(function () { self.redo(); });
 
+    var expireTimers = [];
+    var scheduleCursorExpire = function(clientId) {
+      if(expireTimers[clientId]) {
+        clearTimeout(expireTimers[clientId]);
+      }
+      expireTimers[clientId] = setTimeout(function() {
+        var client = self.getClientObject(clientId);
+        client.removeCursor();
+      }, 3000);
+    }
+
     this.serverAdapter.registerCallbacks({
       ack: function () {
         self.serverAck();
@@ -2306,7 +2333,7 @@ firepad.EditorClient = (function () {
       operation: function (operation) {
         self.applyServer(operation);
       },
-      cursor: function (clientId, cursor, color) {
+      cursor: function (clientId, cursor, color, displayName) {
         if (self.serverAdapter.userId_ === clientId ||
             !(self.state instanceof Client.Synchronized)) {
           return;
@@ -2314,7 +2341,9 @@ firepad.EditorClient = (function () {
         var client = self.getClientObject(clientId);
         if (cursor) {
           if (color) client.setColor(color);
+          if (displayName) client.setDisplayName(displayName);
           client.updateCursor(Cursor.fromJSON(cursor));
+          scheduleCursorExpire(clientId);
         } else {
           client.removeCursor();
         }
@@ -4296,7 +4325,8 @@ firepad.RichTextCodeMirrorAdapter = (function () {
     return this.addedStyleSheet.insertRule(css, 0);
   };
 
-  RichTextCodeMirrorAdapter.prototype.setOtherCursor = function (cursor, color, clientId) {
+  RichTextCodeMirrorAdapter.prototype.setOtherCursor = function (cursor, color, clientId, displayName) {
+    console.log('setOtherCursor');
     var cursorPos = this.cm.posFromIndex(cursor.position);
     if (typeof color !== 'string' || !color.match(/^#[a-fA-F0-9]{3,6}$/)) {
       return;
@@ -4312,8 +4342,9 @@ firepad.RichTextCodeMirrorAdapter = (function () {
     if (cursor.position === cursor.selectionEnd) {
       // show cursor
       var cursorCoords = this.cm.cursorCoords(cursorPos);
-      var cursorEl = document.createElement('span');
+      var cursorEl = document.createElement('div');
       cursorEl.className = 'other-client';
+      cursorEl.style.display = 'inline';
       cursorEl.style.borderLeftWidth = '2px';
       cursorEl.style.borderLeftStyle = 'solid';
       cursorEl.style.borderLeftColor = color;
@@ -4321,6 +4352,12 @@ firepad.RichTextCodeMirrorAdapter = (function () {
       cursorEl.style.height = (cursorCoords.bottom - cursorCoords.top) * 0.9 + 'px';
       cursorEl.setAttribute('data-clientid', clientId);
       cursorEl.style.zIndex = 0;
+
+      var cursorLabel = document.createElement('span');
+      cursorLabel.innerHTML = displayName;
+      cursorLabel.className = 'firepad-cursor-label';
+      cursorLabel.style.color = color;
+      cursorEl.appendChild(cursorLabel);
 
       return this.cm.setBookmark(cursorPos, { widget: cursorEl, insertLeft: true });
     } else {
@@ -5432,6 +5469,7 @@ firepad.Firepad = (function(global) {
       this.codeMirror_.refresh();
 
     var userId = this.getOption('userId', ref.push().key());
+    var userDisplayName = this.getOption('userDisplayName', userId);
     var userColor = this.getOption('userColor', colorFromUserId(userId));
 
     this.entityManager_ = new EntityManager();
@@ -5463,7 +5501,7 @@ firepad.Firepad = (function(global) {
       }
     }
 
-    this.firebaseAdapter_ = new FirebaseAdapter(ref, userId, userColor);
+    this.firebaseAdapter_ = new FirebaseAdapter(ref, userId, userColor, userDisplayName);
     if (this.codeMirror_) {
       this.richTextCodeMirror_ = new RichTextCodeMirror(this.codeMirror_, this.entityManager_, { cssPrefix: 'firepad-' }, changeCallback);
       this.editorAdapter_ = new RichTextCodeMirrorAdapter(this.richTextCodeMirror_);
@@ -5547,6 +5585,10 @@ firepad.Firepad = (function(global) {
 
   Firepad.prototype.setUserColor = function(color) {
     this.firebaseAdapter_.setColor(color);
+  };
+
+  Firepad.prototype.setUserDisplayName = function(displayName) {
+    this.firebaseAdapter_.setDisplayName(displayName);
   };
 
   Firepad.prototype.getText = function() {
