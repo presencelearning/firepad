@@ -24,7 +24,7 @@
 }
 
 .firepad-with-toolbar .CodeMirror-lines {
-  padding-top: 10px;
+  padding-top: 14px;
 }
 
 .firepad-toolbar {
@@ -62,7 +62,7 @@
   border-radius: 2px;
   font-size: 12px;
   z-index: 3;
-  padding: 3px;
+  padding: 2px;
   position: absolute;
   margin-top: -16px;
 }

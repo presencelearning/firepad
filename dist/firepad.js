@@ -4326,7 +4326,6 @@ firepad.RichTextCodeMirrorAdapter = (function () {
   };
 
   RichTextCodeMirrorAdapter.prototype.setOtherCursor = function (cursor, color, clientId, displayName) {
-    console.log('setOtherCursor');
     var cursorPos = this.cm.posFromIndex(cursor.position);
     if (typeof color !== 'string' || !color.match(/^#[a-fA-F0-9]{3,6}$/)) {
       return;
