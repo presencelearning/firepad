@@ -1743,7 +1743,7 @@ firepad.RichTextToolbar = (function(global) {
 
   utils.makeEventEmitter(RichTextToolbar, ['bold', 'italic', 'underline', 'strike', 'font', 'font-size', 'color',
     'left', 'center', 'right', 'unordered-list', 'ordered-list', 'todo-list', 'indent-increase', 'indent-decrease',
-                                           'undo', 'redo', 'insert-image']);
+                                           'undo', 'redo', 'insert-image', 'print']);
 
   RichTextToolbar.prototype.element = function() { return this.element_; };
 
@@ -1751,6 +1751,13 @@ firepad.RichTextToolbar = (function(global) {
     var self = this;
     iconName = iconName || eventName;
     var btn = utils.elt('a', [utils.elt('span', '', { 'class': 'firepad-tb-' + iconName } )], { 'class': 'firepad-btn' });
+    utils.on(btn, 'click', utils.stopEventAnd(function() { self.trigger(eventName); }));
+    return btn;
+  }
+  RichTextToolbar.prototype.makeTextButton_ = function(eventName, iconName) {
+    var self = this;
+    iconName = iconName || eventName;
+    var btn = utils.elt('a', [utils.elt('span', iconName )], { 'class': 'firepad-btn' });
     utils.on(btn, 'click', utils.stopEventAnd(function() { self.trigger(eventName); }));
     return btn;
   }
@@ -1770,7 +1777,8 @@ firepad.RichTextToolbar = (function(global) {
       utils.elt('div', [self.makeButton_('unordered-list', 'list-2'), self.makeButton_('ordered-list', 'numbered-list')], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [self.makeButton_('indent-decrease'), self.makeButton_('indent-increase')], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [self.makeButton_('left', 'paragraph-left'), self.makeButton_('center', 'paragraph-center'), self.makeButton_('right', 'paragraph-right')], { 'class': 'firepad-btn-group'}),
-      utils.elt('div', [self.makeButton_('undo'), self.makeButton_('redo')], { 'class': 'firepad-btn-group'})
+      utils.elt('div', [self.makeButton_('undo'), self.makeButton_('redo')], { 'class': 'firepad-btn-group'}),
+      utils.elt('div', [self.makeTextButton_('print')], { 'class': 'firepad-btn-group'})
     ];
 
     if (self.imageInsertionUI) {
@@ -5683,6 +5691,7 @@ firepad.Firepad = (function(global) {
 
   Firepad.prototype.setHtml = function (html) {
     var lines = firepad.ParseHtml(html, this.entityManager_);
+    console.log('lines: ', lines);
     this.setText(lines);
   };
 
@@ -5784,6 +5793,57 @@ firepad.Firepad = (function(global) {
     this.codeMirror_.redo();
   };
 
+  function showPrintPopup(data) {
+      var mywindow = window.open('', 'Print Team Write', 'height=1000,width=800');
+      mywindow.document.write('<html><head><title>Print Team Write</title>');
+      mywindow.document.write('</head><body >');
+      mywindow.document.write(data);
+      mywindow.document.write('</body></html>');
+
+      mywindow.document.close(); // necessary for IE >= 10
+      mywindow.focus(); // necessary for IE >= 10
+
+      mywindow.print();
+      mywindow.close();
+
+      return true;
+  }
+
+  function inlineCss(elementParam) {
+      var cloned = $(elementParam).clone();
+      $(cloned).find("script").remove();
+      $(cloned).find("link").remove();
+      $(cloned).find("iframe").remove();
+      //
+      var domE = $(elementParam).get()[0];
+      var domCloned = $(cloned).get()[0];
+      //
+      var cssText = window.getComputedStyle(domE).cssText;
+      console.log('cssText: ', cssText);
+      $(cloned).attr("style", cssText);
+      // children
+      var items = domE.getElementsByTagName("*");
+      var itemsCloned = domCloned.getElementsByTagName("*");
+      for (var i = 0; i < items.length; i++) {
+          var domE2 = items[i];
+          //var cssText2 = window.getComputedStyle(domE2).cssText;
+          //console.log('cssText2: ', cssText2);
+          //$(itemsCloned[i]).attr("style", cssText2);
+          var computedStyle = getComputedStyle(domE2, null);
+          for (var j = 0; j < computedStyle.length; j++) {
+            var property = computedStyle.item(j);
+            var value = computedStyle.getPropertyValue(property);
+            itemsCloned[i].style[property] = value;
+          }
+      }
+      return domCloned;
+  };
+
+  Firepad.prototype.print = function() {
+    var codeClone = inlineCss('.CodeMirror-code');
+    showPrintPopup($(codeClone).html());
+  };
+
   Firepad.prototype.insertEntity = function(type, info, origin) {
     this.richTextCodeMirror_.insertEntityAtCursor(type, info, origin);
   };
@@ -5868,6 +5928,7 @@ firepad.Firepad = (function(global) {
     this.toolbar.on('indent-increase', this.indent, this);
     this.toolbar.on('indent-decrease', this.unindent, this);
     this.toolbar.on('insert-image', this.makeImageDialog_, this);
+    this.toolbar.on('print', this.print, this);
 
     this.firepadWrapper_.insertBefore(this.toolbar.element(), this.firepadWrapper_.firstChild);
   };
