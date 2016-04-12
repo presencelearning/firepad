@@ -1747,10 +1747,15 @@ firepad.RichTextToolbar = (function(global) {
 
   RichTextToolbar.prototype.element = function() { return this.element_; };
 
+
+  function capitalize(text) {
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
   RichTextToolbar.prototype.makeButton_ = function(eventName, iconName) {
     var self = this;
     iconName = iconName || eventName;
-    var btn = utils.elt('a', [utils.elt('span', '', { 'class': 'firepad-tb-' + iconName } )], { 'class': 'firepad-btn' });
+    var btn = utils.elt('a', [utils.elt('span', '', { 'class': 'firepad-tb-' + iconName } )], { 'class': 'firepad-btn', 'title': capitalize(eventName)});
     utils.on(btn, 'click', utils.stopEventAnd(function() { self.trigger(eventName); }));
     return btn;
   }
@@ -1778,7 +1783,7 @@ firepad.RichTextToolbar = (function(global) {
       utils.elt('div', [self.makeButton_('indent-decrease'), self.makeButton_('indent-increase')], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [self.makeButton_('left', 'paragraph-left'), self.makeButton_('center', 'paragraph-center'), self.makeButton_('right', 'paragraph-right')], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [self.makeButton_('undo'), self.makeButton_('redo')], { 'class': 'firepad-btn-group'}),
-      utils.elt('div', [self.makeTextButton_('print')], { 'class': 'firepad-btn-group'})
+      utils.elt('div', [self.makeButton_('print')], { 'class': 'firepad-btn-group'})
     ];
 
     if (self.imageInsertionUI) {
@@ -5794,11 +5799,10 @@ firepad.Firepad = (function(global) {
   };
 
   function showPrintPopup(data) {
-      var mywindow = window.open('', 'Print Team Write', 'height=1000,width=800');
-      mywindow.document.write('<html><head><title>Print Team Write</title>');
-      mywindow.document.write('</head><body >');
-      mywindow.document.write(data);
-      mywindow.document.write('</body></html>');
+      var mywindow = window.open('', 'Team Write', 'height=1000,width=800');
+
+      mywindow.document.head.innerHTML = '<title>Team Write</title>';
+      mywindow.document.body.innerHTML = '<body>' + data + '</body>';
 
       mywindow.document.close(); // necessary for IE >= 10
       mywindow.focus(); // necessary for IE >= 10
@@ -5809,39 +5813,41 @@ firepad.Firepad = (function(global) {
       return true;
   }
 
+  // credit to: https://github.com/lukehorvat/computed-style-to-inline-style/blob/master/index.js
+  // and: http://stackoverflow.com/questions/18706243/getcomputedstyle-of-a-clone-element-which-is-not-in-the-dom/18706753#18706753
   function inlineCss(elementParam) {
       var cloned = $(elementParam).clone();
-      $(cloned).find("script").remove();
-      $(cloned).find("link").remove();
-      $(cloned).find("iframe").remove();
+      $(cloned).find('script').remove();
+      $(cloned).find('link').remove();
+      $(cloned).find('iframe').remove();
       //
       var domE = $(elementParam).get()[0];
       var domCloned = $(cloned).get()[0];
       //
       var cssText = window.getComputedStyle(domE).cssText;
-      console.log('cssText: ', cssText);
-      $(cloned).attr("style", cssText);
+      $(cloned).attr('style', cssText);
       // children
-      var items = domE.getElementsByTagName("*");
-      var itemsCloned = domCloned.getElementsByTagName("*");
+      var items = domE.getElementsByTagName('*');
+      var itemsCloned = domCloned.getElementsByTagName('*');
       for (var i = 0; i < items.length; i++) {
           var domE2 = items[i];
-          //var cssText2 = window.getComputedStyle(domE2).cssText;
-          //console.log('cssText2: ', cssText2);
-          //$(itemsCloned[i]).attr("style", cssText2);
           var computedStyle = getComputedStyle(domE2, null);
           for (var j = 0; j < computedStyle.length; j++) {
             var property = computedStyle.item(j);
             var value = computedStyle.getPropertyValue(property);
-            itemsCloned[i].style[property] = value;
+            if(value !== '') {
+              itemsCloned[i].style[property] = value;
+            }
           }
       }
       return domCloned;
   };
 
   Firepad.prototype.print = function() {
-    var codeClone = inlineCss('.CodeMirror-code');
-    showPrintPopup($(codeClone).html());
+    if (this.codeMirror_) { //TODO: should also work with ACE, I just don't know what the selector should be
+      var codeClone = inlineCss('.CodeMirror-code');
+      showPrintPopup($(codeClone).html());
+    }
   };
 
   Firepad.prototype.insertEntity = function(type, info, origin) {

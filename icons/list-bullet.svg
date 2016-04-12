@@ -1,11 +1,28 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="20px" height="20px" viewBox="0 0 20 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-    <g id="Group">
-        <circle id="Oval" cx="3" cy="3" r="3"></circle>
-        <circle id="Oval" cx="3" cy="10" r="3"></circle>
-        <circle id="Oval" cx="3" cy="17" r="3"></circle>
-        <rect id="Rectangle-path" x="8" y="2" width="12" height="2"></rect>
-        <rect id="Rectangle-path" x="8" y="9" width="12" height="2"></rect>
-        <rect id="Rectangle-path" x="8" y="16" width="12" height="2"></rect>
+    <!-- Generator: Sketch 3.6.1 (26313) - http://www.bohemiancoding.com/sketch -->
+    <title>list-bullet</title>
+    <desc>Created with Sketch.</desc>
+    <defs></defs>
+    <g id="Iconography" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="New-Icons---Gold-Release" transform="translate(-458.000000, -218.000000)">
+            <g id="list-bullet" transform="translate(456.000000, 216.000000)">
+                <g id="Group">
+                    <g id="Frame_-_24px">
+                        <rect id="Rectangle-path" x="0" y="0" width="24" height="24"></rect>
+                    </g>
+                    <g id="Filled_Icons" transform="translate(2.000000, 2.000000)" fill="#000000">
+                        <g id="Group">
+                            <circle id="Oval" cx="3" cy="3" r="3"></circle>
+                            <circle id="Oval" cx="3" cy="10" r="3"></circle>
+                            <circle id="Oval" cx="3" cy="17" r="3"></circle>
+                            <rect id="Rectangle-path" x="8" y="2" width="12" height="2"></rect>
+                            <rect id="Rectangle-path" x="8" y="9" width="12" height="2"></rect>
+                            <rect id="Rectangle-path" x="8" y="16" width="12" height="2"></rect>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
     </g>
 </svg>
