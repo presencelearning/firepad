@@ -1736,8 +1736,9 @@ var firepad = firepad || { };
 firepad.RichTextToolbar = (function(global) {
   var utils = firepad.utils;
 
-  function RichTextToolbar(imageInsertionUI) {
+  function RichTextToolbar(imageInsertionUI, showPrint) {
     this.imageInsertionUI = imageInsertionUI;
+    this.showPrint = showPrint;
     this.element_ = this.makeElement_();
   }
 
@@ -1746,7 +1747,6 @@ firepad.RichTextToolbar = (function(global) {
                                            'undo', 'redo', 'insert-image', 'print']);
 
   RichTextToolbar.prototype.element = function() { return this.element_; };
-
 
   function capitalize(text) {
     return text.charAt(0).toUpperCase() + text.slice(1);
@@ -1782,9 +1782,11 @@ firepad.RichTextToolbar = (function(global) {
       utils.elt('div', [self.makeButton_('unordered-list', 'list-2'), self.makeButton_('ordered-list', 'numbered-list')], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [self.makeButton_('indent-decrease'), self.makeButton_('indent-increase')], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [self.makeButton_('left', 'paragraph-left'), self.makeButton_('center', 'paragraph-center'), self.makeButton_('right', 'paragraph-right')], { 'class': 'firepad-btn-group'}),
-      utils.elt('div', [self.makeButton_('undo'), self.makeButton_('redo')], { 'class': 'firepad-btn-group'}),
-      utils.elt('div', [self.makeButton_('print')], { 'class': 'firepad-btn-group'})
+      utils.elt('div', [self.makeButton_('undo'), self.makeButton_('redo')], { 'class': 'firepad-btn-group'})
     ];
+    if(this.showPrint) {
+      toolbarOptions.push(utils.elt('div', [self.makeButton_('print')], { 'class': 'firepad-btn-group'}));
+    }
 
     if (self.imageInsertionUI) {
       toolbarOptions.push(utils.elt('div', [self.makeButton_('insert-image')], { 'class': 'firepad-btn-group' }));
@@ -5470,6 +5472,7 @@ firepad.Firepad = (function(global) {
     }
 
     this.imageInsertionUI = this.getOption('imageInsertionUI', true);
+    this.showPrint = this.getOption('showPrint', true);
 
     if (this.getOption('richTextToolbar', false)) {
       this.addToolbar_();
@@ -5799,9 +5802,11 @@ firepad.Firepad = (function(global) {
   };
 
   function showPrintPopup(data) {
-      var mywindow = window.open('', 'Team Write', 'height=1000,width=800');
+      var d = new Date();
+      var title = 'Team Write - ' + d.toLocaleString();
+      var mywindow = window.open('', title, 'height=1000,width=800');
 
-      mywindow.document.head.innerHTML = '<title>Team Write</title>';
+      mywindow.document.head.innerHTML = '<title>' + title + '</title>';
       mywindow.document.body.innerHTML = '<body>' + data + '</body>';
 
       mywindow.document.close(); // necessary for IE >= 10
@@ -5914,7 +5919,7 @@ firepad.Firepad = (function(global) {
   };
 
   Firepad.prototype.addToolbar_ = function() {
-    this.toolbar = new RichTextToolbar(this.imageInsertionUI);
+    this.toolbar = new RichTextToolbar(this.imageInsertionUI, this.showPrint);
 
     this.toolbar.on('undo', this.undo, this);
     this.toolbar.on('redo', this.redo, this);
@@ -5934,7 +5939,9 @@ firepad.Firepad = (function(global) {
     this.toolbar.on('indent-increase', this.indent, this);
     this.toolbar.on('indent-decrease', this.unindent, this);
     this.toolbar.on('insert-image', this.makeImageDialog_, this);
-    this.toolbar.on('print', this.print, this);
+    if(this.showPrint) {
+      this.toolbar.on('print', this.print, this);
+    }
 
     this.firepadWrapper_.insertBefore(this.toolbar.element(), this.firepadWrapper_.firstChild);
   };
