@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="25px" height="24px" viewBox="0 0 25 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<svg width="19px" height="20px" viewBox="0 0 19 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
     <!-- Generator: Sketch 3.6.1 (26313) - http://www.bohemiancoding.com/sketch -->
     <title>italic</title>
     <desc>Created with Sketch.</desc>
     <defs></defs>
-    <g id="Iconography" stroke="none" stroke-width="1" fill-rule="evenodd">
-        <g id="New-Icons---Gold-Release" transform="translate(-313.000000, -216.000000)">
+    <g id="Iconography" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="New-Icons---Gold-Release" transform="translate(-316.000000, -218.000000)">
             <g id="italic" transform="translate(313.691406, 216.000000)">
                 <g id="Group">
-                    <g id="Frame_-_24px" fill="none" >
+                    <g id="Frame_-_24px">
                         <rect id="Rectangle-path" x="0" y="0" width="24" height="24"></rect>
                     </g>
-                    <g id="Line_Icons" transform="translate(3.000000, 2.000000)">
+                    <g id="Line_Icons" transform="translate(3.000000, 2.000000)" fill="#000000">
                         <path d="M18,2 L18,0 L8,0 L8,2 L11.461,2 L4.351,18 L0,18 L0,20 L10,20 L10,18 L6.539,18 L13.649,2 L18,2 Z" id="Shape"></path>
                     </g>
                 </g>

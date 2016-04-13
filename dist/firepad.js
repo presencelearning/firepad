@@ -1736,21 +1736,33 @@ var firepad = firepad || { };
 firepad.RichTextToolbar = (function(global) {
   var utils = firepad.utils;
 
-  function RichTextToolbar(imageInsertionUI) {
+  function RichTextToolbar(imageInsertionUI, showPrint) {
     this.imageInsertionUI = imageInsertionUI;
+    this.showPrint = showPrint;
     this.element_ = this.makeElement_();
   }
 
   utils.makeEventEmitter(RichTextToolbar, ['bold', 'italic', 'underline', 'strike', 'font', 'font-size', 'color',
     'left', 'center', 'right', 'unordered-list', 'ordered-list', 'todo-list', 'indent-increase', 'indent-decrease',
-                                           'undo', 'redo', 'insert-image']);
+                                           'undo', 'redo', 'insert-image', 'print']);
 
   RichTextToolbar.prototype.element = function() { return this.element_; };
+
+  function capitalize(text) {
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
 
   RichTextToolbar.prototype.makeButton_ = function(eventName, iconName) {
     var self = this;
     iconName = iconName || eventName;
-    var btn = utils.elt('a', [utils.elt('span', '', { 'class': 'firepad-tb-' + iconName } )], { 'class': 'firepad-btn' });
+    var btn = utils.elt('a', [utils.elt('span', '', { 'class': 'firepad-tb-' + iconName } )], { 'class': 'firepad-btn', 'title': capitalize(eventName)});
+    utils.on(btn, 'click', utils.stopEventAnd(function() { self.trigger(eventName); }));
+    return btn;
+  }
+  RichTextToolbar.prototype.makeTextButton_ = function(eventName, iconName) {
+    var self = this;
+    iconName = iconName || eventName;
+    var btn = utils.elt('a', [utils.elt('span', iconName )], { 'class': 'firepad-btn' });
     utils.on(btn, 'click', utils.stopEventAnd(function() { self.trigger(eventName); }));
     return btn;
   }
@@ -1772,6 +1784,9 @@ firepad.RichTextToolbar = (function(global) {
       utils.elt('div', [self.makeButton_('left', 'paragraph-left'), self.makeButton_('center', 'paragraph-center'), self.makeButton_('right', 'paragraph-right')], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [self.makeButton_('undo'), self.makeButton_('redo')], { 'class': 'firepad-btn-group'})
     ];
+    if(this.showPrint) {
+      toolbarOptions.push(utils.elt('div', [self.makeButton_('print')], { 'class': 'firepad-btn-group'}));
+    }
 
     if (self.imageInsertionUI) {
       toolbarOptions.push(utils.elt('div', [self.makeButton_('insert-image')], { 'class': 'firepad-btn-group' }));
@@ -5457,6 +5472,7 @@ firepad.Firepad = (function(global) {
     }
 
     this.imageInsertionUI = this.getOption('imageInsertionUI', true);
+    this.showPrint = this.getOption('showPrint', true);
 
     if (this.getOption('richTextToolbar', false)) {
       this.addToolbar_();
@@ -5683,6 +5699,7 @@ firepad.Firepad = (function(global) {
 
   Firepad.prototype.setHtml = function (html) {
     var lines = firepad.ParseHtml(html, this.entityManager_);
+    console.log('lines: ', lines);
     this.setText(lines);
   };
 
@@ -5784,6 +5801,60 @@ firepad.Firepad = (function(global) {
     this.codeMirror_.redo();
   };
 
+  function showPrintPopup(data) {
+      var d = new Date();
+      var title = 'Team Write - ' + d.toLocaleString();
+      var mywindow = window.open('', title, 'height=1000,width=800');
+
+      mywindow.document.head.innerHTML = '<title>' + title + '</title>';
+      mywindow.document.body.innerHTML = '<body>' + data + '</body>';
+
+      mywindow.document.close(); // necessary for IE >= 10
+      mywindow.focus(); // necessary for IE >= 10
+
+      mywindow.print();
+      mywindow.close();
+
+      return true;
+  }
+
+  // credit to: https://github.com/lukehorvat/computed-style-to-inline-style/blob/master/index.js
+  // and: http://stackoverflow.com/questions/18706243/getcomputedstyle-of-a-clone-element-which-is-not-in-the-dom/18706753#18706753
+  function inlineCss(elementParam) {
+      var cloned = $(elementParam).clone();
+      $(cloned).find('script').remove();
+      $(cloned).find('link').remove();
+      $(cloned).find('iframe').remove();
+      //
+      var domE = $(elementParam).get()[0];
+      var domCloned = $(cloned).get()[0];
+      //
+      var cssText = window.getComputedStyle(domE).cssText;
+      $(cloned).attr('style', cssText);
+      // children
+      var items = domE.getElementsByTagName('*');
+      var itemsCloned = domCloned.getElementsByTagName('*');
+      for (var i = 0; i < items.length; i++) {
+          var domE2 = items[i];
+          var computedStyle = getComputedStyle(domE2, null);
+          for (var j = 0; j < computedStyle.length; j++) {
+            var property = computedStyle.item(j);
+            var value = computedStyle.getPropertyValue(property);
+            if(value !== '') {
+              itemsCloned[i].style[property] = value;
+            }
+          }
+      }
+      return domCloned;
+  };
+
+  Firepad.prototype.print = function() {
+    if (this.codeMirror_) { //TODO: should also work with ACE, I just don't know what the selector should be
+      var codeClone = inlineCss('.CodeMirror-code');
+      showPrintPopup($(codeClone).html());
+    }
+  };
+
   Firepad.prototype.insertEntity = function(type, info, origin) {
     this.richTextCodeMirror_.insertEntityAtCursor(type, info, origin);
   };
@@ -5848,7 +5919,7 @@ firepad.Firepad = (function(global) {
   };
 
   Firepad.prototype.addToolbar_ = function() {
-    this.toolbar = new RichTextToolbar(this.imageInsertionUI);
+    this.toolbar = new RichTextToolbar(this.imageInsertionUI, this.showPrint);
 
     this.toolbar.on('undo', this.undo, this);
     this.toolbar.on('redo', this.redo, this);
@@ -5868,6 +5939,9 @@ firepad.Firepad = (function(global) {
     this.toolbar.on('indent-increase', this.indent, this);
     this.toolbar.on('indent-decrease', this.unindent, this);
     this.toolbar.on('insert-image', this.makeImageDialog_, this);
+    if(this.showPrint) {
+      this.toolbar.on('print', this.print, this);
+    }
 
     this.firepadWrapper_.insertBefore(this.toolbar.element(), this.firepadWrapper_.firstChild);
   };
