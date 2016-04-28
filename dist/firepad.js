@@ -2950,20 +2950,17 @@ firepad.RichTextCodeMirror = (function () {
   // A cache of dynamically-created styles so we can re-use them.
   var StyleCache_ = {};
 
-  function RichTextCodeMirror(codeMirror, entityManager, options, changeCallback) {
+  function RichTextCodeMirror(codeMirror, entityManager, options) {
     this.codeMirror = codeMirror;
     this.options_ = options || { };
     this.entityManager_ = entityManager;
     this.currentAttributes_ = null;
-    this.changeCallback_ = changeCallback;
 
     var self = this;
     this.annotationList_ = new AnnotationList(
-        function(oldNodes, newNodes) { 
-          self.onAnnotationsChanged_(oldNodes, newNodes); 
-          if (changeCallback) {
-            changeCallback();
-          }
+        function(oldNodes, newNodes) {
+          self.onAnnotationsChanged_(oldNodes, newNodes);
+          self.fixBullets();
         });
 
     // Ensure annotationList is in sync with any existing codemirror contents.
@@ -2998,6 +2995,55 @@ firepad.RichTextCodeMirror = (function () {
     this.codeMirror.off('cursorActivity', this.onCursorActivity_);
     this.clearAnnotations_();
   };
+
+  //Code Mirror fails to format bullet points in front of lists. When this is called, it searches
+  //for 'CodeMirror-widget's, and then checks to see if any of them have a child element that is
+  //a 'firepad-list-left'. If so, it goes to the first sibling of the widget and if it has any
+  //classes, it applies those classes to the bullet. Hence, the bullet should pick up the font,
+  //size, and color of the first span of content that follows it.
+  //We debounce this using bulletTimeout as it's slightly expensive and gets triggered often
+  var bulletTimeout = null;
+
+  RichTextCodeMirror.prototype.fixBullets = function() {
+    console.log('[firepad] bullets called');
+    if(bulletTimeout) {
+      return;
+    }
+    bulletTimeout = setTimeout( function() {
+      console.log('[firepad] bullets fired');
+      var widgets = document.getElementsByClassName('CodeMirror-widget');
+      for(var i = 0; i < widgets.length; i++) {
+        var bullet = widgets[i].getElementsByClassName('firepad-list-left')[0];
+        if(bullet) {
+          var sibling = widgets[i].nextSibling;
+          //if there's no sibling that means we don't yet have content here. In this case, we go
+          //to the previous line and see if it's also bulleted, if so, grab that bullet's style
+          if(!sibling) {
+            var prevLine = widgets[i].parentNode.parentNode.previousSibling;
+            if(prevLine) {
+              var prevLineWidget = prevLine.getElementsByClassName('CodeMirror-widget')[0];
+              if(prevLineWidget) {
+                var prevLineBullet = prevLineWidget.getElementsByClassName('firepad-list-left')[0];
+                if(prevLineBullet) {
+                  sibling = prevLineWidget.nextSibling;
+                }
+              }
+            }
+          }
+          if(sibling && sibling.classList && sibling.classList.length>0) {
+            var siblingClasses = sibling.classList;
+            bullet.className = 'firepad-list-left';
+            for(var j=0; j<siblingClasses.length; j++) {
+              bullet.classList.add(siblingClasses[j]);
+            }
+          } else {
+            console.log('[firepad] no sibling');
+          }
+        }
+      }
+      bulletTimeout = null;
+    }, 100);
+  }
 
   RichTextCodeMirror.prototype.toggleAttribute = function(attribute, value) {
     var trueValue = value || true;
@@ -3412,11 +3458,6 @@ firepad.RichTextCodeMirror = (function () {
 
     // This probably shouldn't be necessary.  There must be a lurking CodeMirror bug.
     this.queueRefresh_();
-
-    //This is the end of the line for some kinds of changes that impact bullet formating and so needs a callback
-    if(this.changeCallback_) {
-      this.changeCallback_();
-    }
   };
 
   RichTextCodeMirror.prototype.queueRefresh_ = function() {
@@ -3584,11 +3625,6 @@ firepad.RichTextCodeMirror = (function () {
     if (newChanges.length > 0) {
       this.trigger('change', this, newChanges);
     }
-
-    //callback parent to notify a change happened
-    if(this.changeCallback_) {
-      this.changeCallback_();
-    }
   };
 
   RichTextCodeMirror.prototype.convertCoordinateSystemForChanges_ = function(changes) {
@@ -3736,6 +3772,15 @@ firepad.RichTextCodeMirror = (function () {
   };
 
   RichTextCodeMirror.prototype.markLineSentinelCharacters_ = function(line, startIndex, endIndex, listNumber) {
+    var spans = this.annotationList_.getAnnotatedSpansForPos(line);
+    console.log('[firepad] spans for line: ', line, spans);
+    var classes;
+    if(spans.length>1) {
+      var atts = this.annotationList_.getAnnotatedSpansForPos(line)[1].annotation.attributes;
+      classes = this.getClassNameForAttributes_(atts);
+    }
+    console.log('[firepad] classes for line: ', line, classes);
+
     var cm = this.codeMirror;
     // If the mark is at the beginning of the line and it represents a list element, we need to replace it with
     // the appropriate html element for the list heading.
@@ -3755,10 +3800,10 @@ firepad.RichTextCodeMirror = (function () {
         listNumber.push(1);
       }
       if (listType === 'o') {
-        element = this.makeOrderedListElement_(listNumber[indent]);
+        element = this.makeOrderedListElement_(listNumber[indent], classes);
         listNumber[indent]++;
       } else if (listType === 'u') {
-        element = this.makeUnorderedListElement_();
+        element = this.makeUnorderedListElement_(classes);
         listNumber[indent] = 1;
       } else if (listType === 't') {
         element = this.makeTodoListElement_(false, getMarkerLine);
@@ -3776,10 +3821,6 @@ firepad.RichTextCodeMirror = (function () {
       // Reset deeper indents back to 1.
       listNumber = listNumber.slice(0, indent+1);
 
-      //This is the end of the line for some kinds of changes that impact bullet formating and so needs a callback
-      if(this.changeCallback_) {
-        this.changeCallback_();
-      }
     }
 
     // Create a marker to cover this series of sentinel characters.
@@ -3794,15 +3835,17 @@ firepad.RichTextCodeMirror = (function () {
     marker.isForLineSentinel = true;
   };
 
-  RichTextCodeMirror.prototype.makeOrderedListElement_ = function(number) {
+  RichTextCodeMirror.prototype.makeOrderedListElement_ = function(number, oldClasses) {
+    var classes = oldClasses ? oldClasses : this.getClassNameForAttributes_(this.currentAttributes_);
     return utils.elt('div', number + '.', {
-      'class': 'firepad-list-left'
+      'class': 'firepad-list-left' + ' ' + classes
     });
   };
 
-  RichTextCodeMirror.prototype.makeUnorderedListElement_ = function() {
+  RichTextCodeMirror.prototype.makeUnorderedListElement_ = function(oldClasses) {
+    var classes = oldClasses ? oldClasses : this.getClassNameForAttributes_(this.currentAttributes_);
     return utils.elt('div', '\u2022', {
-      'class': 'firepad-list-left'
+      'class': 'firepad-list-left' + ' ' + classes
     });
   };
 
@@ -3958,11 +4001,6 @@ firepad.RichTextCodeMirror = (function () {
           self.trigger('newLine', {line: cursorLine+1, attr: attributes});
         });
       }
-    }
-
-    //This is the end of the line for some kinds of changes that impact bullet formating and so needs a callback
-    if(this.changeCallback_) {
-      this.changeCallback_();
     }
   };
 
@@ -5489,36 +5527,9 @@ firepad.Firepad = (function(global) {
 
     this.entityManager_ = new EntityManager();
 
-    //respond to changes in the document to follow up Code Mirror
-    var changeCallback = function() {
-      fixBullets();
-    }
-
-    //Code Mirror fails to format bullet points in front of lists. When this is called, it searches 
-    //for 'CodeMirror-widget's, and then checks to see if any of them have a child element that is
-    //a 'firepad-list-left'. If so, it goes to the first sibling of the widget and if it has any
-    //classes, it applies those classes to the bullet. Hence, the bullet should pick up the font,
-    //size, and color of the first span of content that follows it.
-    var fixBullets = function() {
-      var widgets = document.getElementsByClassName('CodeMirror-widget');
-      for(var i = 0; i < widgets.length; i++) {
-        var bullets = widgets[i].getElementsByClassName('firepad-list-left');
-        if(bullets[0]) {
-          var sibling = widgets[i].nextSibling;
-          if(sibling && sibling.classList && sibling.classList.length>0) {
-            var siblingClasses = sibling.classList;
-            bullets[0].className = 'firepad-list-left';
-            for(var j=0; j<siblingClasses.length; j++) {
-              bullets[0].classList.add(siblingClasses[j]);
-            }
-          }
-        }
-      }
-    }
-
     this.firebaseAdapter_ = new FirebaseAdapter(ref, userId, userColor, userDisplayName);
     if (this.codeMirror_) {
-      this.richTextCodeMirror_ = new RichTextCodeMirror(this.codeMirror_, this.entityManager_, { cssPrefix: 'firepad-' }, changeCallback);
+      this.richTextCodeMirror_ = new RichTextCodeMirror(this.codeMirror_, this.entityManager_, { cssPrefix: 'firepad-' });
       this.editorAdapter_ = new RichTextCodeMirrorAdapter(this.richTextCodeMirror_);
     } else {
       this.editorAdapter_ = new ACEAdapter(this.ace_);
