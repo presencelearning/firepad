@@ -3005,12 +3005,10 @@ firepad.RichTextCodeMirror = (function () {
   var bulletTimeout = null;
 
   RichTextCodeMirror.prototype.fixBullets = function() {
-    console.log('[firepad] bullets called');
     if(bulletTimeout) {
       return;
     }
     bulletTimeout = setTimeout( function() {
-      console.log('[firepad] bullets fired');
       var widgets = document.getElementsByClassName('CodeMirror-widget');
       for(var i = 0; i < widgets.length; i++) {
         var bullet = widgets[i].getElementsByClassName('firepad-list-left')[0];
@@ -3773,13 +3771,11 @@ firepad.RichTextCodeMirror = (function () {
 
   RichTextCodeMirror.prototype.markLineSentinelCharacters_ = function(line, startIndex, endIndex, listNumber) {
     var spans = this.annotationList_.getAnnotatedSpansForPos(line);
-    console.log('[firepad] spans for line: ', line, spans);
     var classes;
     if(spans.length>1) {
       var atts = this.annotationList_.getAnnotatedSpansForPos(line)[1].annotation.attributes;
       classes = this.getClassNameForAttributes_(atts);
     }
-    console.log('[firepad] classes for line: ', line, classes);
 
     var cm = this.codeMirror;
     // If the mark is at the beginning of the line and it represents a list element, we need to replace it with
