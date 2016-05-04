@@ -3034,8 +3034,6 @@ firepad.RichTextCodeMirror = (function () {
             for(var j=0; j<siblingClasses.length; j++) {
               bullet.classList.add(siblingClasses[j]);
             }
-          } else {
-            console.log('[firepad] no sibling');
           }
         }
       }
@@ -3053,6 +3051,8 @@ firepad.RichTextCodeMirror = (function () {
         attrs[attribute] = trueValue;
       }
       this.currentAttributes_ = attrs;
+      this.updateToolbarButnsState_();
+
     } else {
       var attributes = this.getCurrentAttributes_();
       var newValue = (attributes[attribute] !== trueValue) ? trueValue : false;
@@ -3070,6 +3070,8 @@ firepad.RichTextCodeMirror = (function () {
         attrs[attribute] = value;
       }
       this.currentAttributes_ = attrs;
+      this.updateToolbarButnsState_();
+
     } else {
       this.updateTextAttributes(cm.indexFromPos(cm.getCursor('start')), cm.indexFromPos(cm.getCursor('end')),
         function(attributes) {
@@ -3881,10 +3883,14 @@ firepad.RichTextCodeMirror = (function () {
   };
 
   RichTextCodeMirror.prototype.onCursorActivity_ = function() {
-    var self = this;
-    setTimeout(function() {
-      self.updateCurrentAttributes_();
-    }, 1);
+    var updateAttrs=!this.doNotUpdateCurrentAttributesOnNextCursorActivity;
+    this.doNotUpdateCurrentAttributesOnNextCursorActivity=false;
+    if (updateAttrs) {
+      var self = this;
+      setTimeout(function() {
+        self.updateCurrentAttributes_();
+      }, 1);
+    }
   };
 
   RichTextCodeMirror.prototype.getCurrentAttributes_ = function() {
@@ -3897,34 +3903,43 @@ firepad.RichTextCodeMirror = (function () {
   RichTextCodeMirror.prototype.updateCurrentAttributes_ = function() {
     var cm = this.codeMirror;
     var anchor = cm.indexFromPos(cm.getCursor('anchor')), head = cm.indexFromPos(cm.getCursor('head'));
-    var pos = head;
+    var pos = head, c='';
+
     if (anchor > head) { // backwards selection
       // Advance past any newlines or line sentinels.
       while(pos < this.end()) {
-        var c = this.getRange(pos, pos+1);
-        if (c !== '\n' && c !== LineSentinelCharacter)
-          break;
+        c = this.getRange(pos, pos+1);
+        if (c !== '\n' && c !== LineSentinelCharacter) break;
         pos++;
       }
       if (pos < this.end())
         pos++; // since we're going to look at the annotation span to the left to decide what attributes to use.
     } else {
-      // Back up before any newlines or line sentinels.
+      // look to the left, Back up before any newlines or line sentinels.
       while(pos > 0) {
         c = this.getRange(pos-1, pos);
-        if (c !== '\n' && c !== LineSentinelCharacter)
-          break;
+        if (c !== '\n' && c !== LineSentinelCharacter) break;
         pos--;
       }
+      if (nextc=='\n') pos++; // we're just before a newline, advance to the newline
     }
-    var spans = this.annotationList_.getAnnotatedSpansForPos(pos);
-    this.currentAttributes_ = {};
 
+    var spans, lookLeft;
+    var nextc=this.getRange(head, head+1), eol=(nextc==='\n' || nextc===''), sol=(this.getRange(head-1, head)==LineSentinelCharacter);
+    if (anchor==head && (head===0 || (sol && !eol))) {
+      // special case for head==0 or beginning of a non empty line (and not selection), look right if possible
+      spans = this.annotationList_.getAnnotatedSpansForPos(head);
+      lookLeft=(spans.length<2);
+    } else {
+      lookLeft=true;
+      spans = this.annotationList_.getAnnotatedSpansForPos(pos);
+    }
+
+    this.currentAttributes_ = {};
     var attributes = {};
-    // Use the attributes to the left unless they're line attributes (in which case use the ones to the right.
-    if (spans.length > 0 && (!(ATTR.LINE_SENTINEL in spans[0].annotation.attributes))) {
+    if (lookLeft && spans.length > 0 && !(ATTR.LINE_SENTINEL in spans[0].annotation.attributes)) {
       attributes = spans[0].annotation.attributes;
-    } else if (spans.length > 1) {
+    } else if (!lookLeft && spans.length > 1) {
       firepad.utils.assert(!(ATTR.LINE_SENTINEL in spans[1].annotation.attributes), "Cursor can't be between two line sentinel characters.");
       attributes = spans[1].annotation.attributes;
     }
@@ -3934,7 +3949,39 @@ firepad.RichTextCodeMirror = (function () {
         this.currentAttributes_[attr] = attributes[attr];
       }
     }
+
+    this.updateToolbarButnsState_();
   };
+
+  RichTextCodeMirror.prototype.updateToolbarButnsState_ = function() {
+    if (!this.codeMirror || !this.codeMirror.firepad || !this.codeMirror.firepad.toolbar) return;
+    var toolbar=this.codeMirror.firepad.toolbar;
+    var attr=this.currentAttributes_;
+
+    if (!toolbar.boldBtnElem) { // cache button elements
+      toolbar.boldBtnElem = toolbar.element_.getElementsByClassName('firepad-tb-bold')[0].parentElement;
+      toolbar.italicBtnElem = toolbar.element_.getElementsByClassName('firepad-tb-italic')[0].parentElement;
+      toolbar.underlineBtnElem = toolbar.element_.getElementsByClassName('firepad-tb-underline')[0].parentElement;
+      toolbar.strikeBtnElem = toolbar.element_.getElementsByClassName('firepad-tb-strikethrough')[0].parentElement;
+    }
+
+    if (toolbar.updateToolbarButnsStateTimeout) clearTimeout(toolbar.updateToolbarButnsStateTimeout);
+    toolbar.updateToolbarButnsStateTimeout = setTimeout(function() {
+      toggleClass(toolbar.boldBtnElem, 'firepad-btn-highlight', attr.b === true);
+      toggleClass(toolbar.italicBtnElem, 'firepad-btn-highlight', attr.i === true);
+      toggleClass(toolbar.underlineBtnElem, 'firepad-btn-highlight', attr.u === true);
+      toggleClass(toolbar.strikeBtnElem, 'firepad-btn-highlight', attr.s === true);
+    }, 100);
+  };
+
+  // If newState is provided add/remove theClass accordingly, otherwise toggle theClass
+  function toggleClass(elem, theClass, newState) {
+    var matchRegExp = new RegExp('(?:^|\\s)' + theClass + '(?!\\S)', 'g');
+    var add = (arguments.length > 2 ? newState : (elem.className.match(matchRegExp) === null));
+
+    elem.className = elem.className.replace(matchRegExp, ''); // clear all
+    if (add) elem.className += ' ' + theClass;
+  }
 
   RichTextCodeMirror.prototype.getCurrentLineAttributes_ = function() {
     var cm = this.codeMirror;
@@ -4007,6 +4054,9 @@ firepad.RichTextCodeMirror = (function () {
     var listType = lineAttributes[ATTR.LIST_TYPE];
     var indent = lineAttributes[ATTR.LINE_INDENT];
 
+    var value = cm.getDoc().getValue();
+    console.log('value: ', value);
+
     var backspaceAtStartOfLine = this.emptySelection_() && cursorPos.ch === 1;
 
     if (backspaceAtStartOfLine && listType) {
@@ -4015,9 +4065,19 @@ firepad.RichTextCodeMirror = (function () {
         delete attributes[ATTR.LIST_TYPE];
         delete attributes[ATTR.LINE_INDENT];
       });
+    } else if (value.length===0 || (value.length===1 && value.charCodeAt(0)===57344)) {
+      // if the document is empty just return; If the document is of length 1, and that one character is char code
+      // 57344, then it is actually empty. (This odd character really shouldn't be there, it's a placeholder
+      // inserted by CodeMirror, but it shouldn't show up in the doc.)
+      return;
     } else if (backspaceAtStartOfLine && indent && indent > 0) {
       this.unindent();
     } else {
+      var charLeft=cm.getRange({line: cursorPos.line, ch: cursorPos.ch-1}, cursorPos);
+      if (charLeft==='') return; // nothing to delete
+      this.updateCurrentAttributes_(); // refresh attribute from any previous deleteLeft
+      // disable updateCurrentAttributes in the onNextCursorActivity triggered by deleteH
+      this.doNotUpdateCurrentAttributesOnNextCursorActivity=true;
       cm.deleteH(-1, "char");
     }
   };
