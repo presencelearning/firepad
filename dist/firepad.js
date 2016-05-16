@@ -2970,6 +2970,9 @@ firepad.RichTextCodeMirror = (function () {
     bind(this, 'onCodeMirrorChange_');
     bind(this, 'onCursorActivity_');
 
+    bind(this, 'onCodeMirrorCopyCut_');
+    bind(this, 'onCodeMirrorPaste_');
+
     if (parseInt(CodeMirror.version) >= 4) {
       this.codeMirror.on('changes', this.onCodeMirrorChange_);
     } else {
@@ -2977,6 +2980,10 @@ firepad.RichTextCodeMirror = (function () {
     }
     this.codeMirror.on('beforeChange', this.onCodeMirrorBeforeChange_);
     this.codeMirror.on('cursorActivity', this.onCursorActivity_);
+
+    this.codeMirror.on('copy', this.onCodeMirrorCopyCut_);
+    this.codeMirror.on('cut', this.onCodeMirrorCopyCut_);
+    this.codeMirror.on('paste', this.onCodeMirrorPaste_);
 
     this.changeId_ = 0;
     this.outstandingChanges_ = { };
@@ -2993,6 +3000,11 @@ firepad.RichTextCodeMirror = (function () {
     this.codeMirror.off('change', this.onCodeMirrorChange_);
     this.codeMirror.off('changes', this.onCodeMirrorChange_);
     this.codeMirror.off('cursorActivity', this.onCursorActivity_);
+
+    this.codeMirror.off('copy', this.onCodeMirrorCopyCut_);
+    this.codeMirror.off('cut', this.onCodeMirrorCopyCut_);
+    this.codeMirror.off('paste', this.onCodeMirrorPaste_);
+
     this.clearAnnotations_();
   };
 
@@ -3553,6 +3565,44 @@ firepad.RichTextCodeMirror = (function () {
     }
   };
 
+  RichTextCodeMirror.prototype.onCodeMirrorCopyCut_ = function(cm, e) {
+    var fp=this.codeMirror.firepad;
+      if (!fp.selectionHasAttributes()) return ; // not rich text
+
+      var html=fp.getHtmlFromSelection(); 
+      if (!html) return; // something  went wrong
+
+      if (!this.firepadStyleWrapper) {    
+        var style = window.getComputedStyle(this.codeMirror.getWrapperElement());
+        this.firepadStyleWrapper=
+        'font-family:'+style.getPropertyValue('font-family')+';'+
+        'font-size:'+style.getPropertyValue('font-size')+';'+
+        'background-color:'+style.getPropertyValue('background-color')+';'+
+        'color:'+style.getPropertyValue('color')+';'+
+        'text-align:'+style.getPropertyValue('text-align')+';';
+      }
+      html='<span style="'+this.firepadStyleWrapper+'">'+html+'</span>';
+
+      var ios = /AppleWebKit/.test(navigator.userAgent) && /Mobile\/\w+/.test(navigator.userAgent);
+      if (!e.clipboardData || ios) return; // clipboard ops not supported
+
+      if (e.type == "cut") cm.replaceSelection("", null, "cut");      
+
+      e.preventDefault();
+      e.clipboardData.clearData();
+      e.clipboardData.setData("text/html", html);
+    };
+
+    RichTextCodeMirror.prototype.onCodeMirrorPaste_ = function(cm, e) {
+      var html = e.clipboardData ? e.clipboardData.getData('text/html') : null;
+    if (!html) return; // not html or something went wrong, revert to CM paste
+
+    cm.replaceSelection('');
+    var fp=this.codeMirror.firepad;
+    fp.insertHtmlAtCursor(html);
+    e.preventDefault();
+  };
+
   function cmpPos (a, b) {
     return (a.line - b.line) || (a.ch - b.ch);
   }
@@ -4055,7 +4105,6 @@ firepad.RichTextCodeMirror = (function () {
     var indent = lineAttributes[ATTR.LINE_INDENT];
 
     var value = cm.getDoc().getValue();
-    console.log('value: ', value);
 
     var backspaceAtStartOfLine = this.emptySelection_() && cursorPos.ch === 1;
 
@@ -4188,7 +4237,7 @@ firepad.RichTextCodeMirror = (function () {
   function bind (obj, method) {
     var fn = obj[method];
     obj[method] = function () {
-      fn.apply(obj, arguments);
+      return fn.apply(obj, arguments);
     };
   }
 
@@ -4858,14 +4907,14 @@ firepad.ParseHtml = (function () {
   }
 
   ParseOutput.prototype.newlineIfNonEmpty = function(state) {
-    this.cleanLine_();
+    this.cleanLine_(true);
     if (this.currentLine.length > 0) {
       this.newline(state);
     }
   };
 
   ParseOutput.prototype.newlineIfNonEmptyOrListItem = function(state) {
-    this.cleanLine_();
+    this.cleanLine_(true);
     if (this.currentLine.length > 0 || this.currentLineListItemType !== null) {
       this.newline(state);
     }
@@ -4887,15 +4936,17 @@ firepad.ParseHtml = (function () {
     this.currentLineListItemType = type;
   };
 
-  ParseOutput.prototype.cleanLine_ = function() {
+  ParseOutput.prototype.cleanLine_ = function(ignoreNbsps) {
     // Kinda' a hack, but we remove leading and trailing spaces (since these aren't significant in html) and
     // replaces nbsp's with normal spaces.
     if (this.currentLine.length > 0) {
       var last = this.currentLine.length - 1;
       this.currentLine[0].text = this.currentLine[0].text.replace(/^ +/, '');
       this.currentLine[last].text = this.currentLine[last].text.replace(/ +$/g, '');
-      for(var i = 0; i < this.currentLine.length; i++) {
-        this.currentLine[i].text = this.currentLine[i].text.replace(/\u00a0/g, ' ');
+      if (!ignoreNbsps) {
+        for(var i = 0; i < this.currentLine.length; i++) {
+          this.currentLine[i].text = this.currentLine[i].text.replace(/\u00a0/g, ' ');
+        }
       }
     }
     // If after stripping trailing whitespace, there's nothing left, clear currentLine out.
@@ -4904,14 +4955,18 @@ firepad.ParseHtml = (function () {
     }
   };
 
-  var entityManager_;
-  function parseHtml(html, entityManager) {
+  var entityManager_, codeMirror_;
+  function parseHtml(html, entityManager, codeMirror) {
+    html=html.replace(/(\r\n|\n|\r)?<html>(\r\n|\n|\r)?<body>(\r\n|\n|\r)?/, ''); // remove <html><body>
+    html=html.replace(/(\r\n|\n|\r)?<\/body>(\r\n|\n|\r)?<\/html>(\r\n|\n|\r)?/, ''); // remove </body></html>
+    
     // Create DIV with HTML (as a convenient way to parse it).
     var div = (firepad.document || document).createElement('div');
     div.innerHTML = html;
 
     // HACK until I refactor this.
     entityManager_ = entityManager;
+    codeMirror_ = codeMirror;
 
     var output = new ParseOutput();
     var state = new ParseState();
@@ -4941,8 +4996,8 @@ firepad.ParseHtml = (function () {
 
     switch (node.nodeType) {
       case Node.TEXT_NODE:
-        // This probably isn't exactly right, but mostly works...
-        var text = node.nodeValue.replace(/[ \n\t]+/g, ' ');
+        // replace spaces with &nbsp; so they can withstand cleanLine_
+        var text = node.nodeValue.replace(/ /g, '\u00a0');
         output.currentLine.push(firepad.Text(text, state.textFormatting));
         break;
       case Node.ELEMENT_NODE:
@@ -5043,7 +5098,29 @@ firepad.ParseHtml = (function () {
     }
   }
 
+  function styleEqual(s1,s2) {
+    s1=s1.toLowerCase(); // lower
+    s1=s1.split(' ').join(''); // remove spaces
+    s1=s1.lastIndexOf(";") == s1.length - 1 ?  s1.substring(0,  s1.length -1 ) : s1; // remove trailing ;
+    s2=s2.toLowerCase(); // lower
+    s2=s2.split(' ').join(''); // remove spaces
+    s2=s2.lastIndexOf(";") == s2.length - 1 ?  s2.substring(0,  s2.length -1 ) : s2; // remove trailing ;
+    return s1==s2;
+  }
+
   function parseStyle(state, styleString) {
+    if (!this.firepadDefaultStyles) {
+      // caching some default styles needed later
+      var style = window.getComputedStyle(codeMirror_.getWrapperElement());
+      firepadDefaultStyles={
+        fontFamily: style.getPropertyValue('font-family'),
+        fontSize: style.getPropertyValue('font-size'),
+        backgroundColor: style.getPropertyValue('background-color'),
+        color: style.getPropertyValue('color'),
+        textAlign: style.getPropertyValue('text-align')
+      };
+    }
+
     var textFormatting = state.textFormatting;
     var lineFormatting = state.lineFormatting;
     var styles = styleString.split(';');
@@ -5068,15 +5145,19 @@ firepad.ParseHtml = (function () {
           textFormatting = textFormatting.italic(italic);
           break;
         case 'color':
+          if (styleEqual(val, this.firepadDefaultStyles.color)) break;
           textFormatting = textFormatting.color(val);
           break;
         case 'background-color':
+          if (styleEqual(val, this.firepadDefaultStyles.backgroundColor)) break;
           textFormatting = textFormatting.backgroundColor(val);
           break;
         case 'text-align':
+          if (styleEqual(val, this.firepadDefaultStyles.textAlign)) break;
           lineFormatting = lineFormatting.align(val);
           break;
         case 'font-size':
+          if (styleEqual(val, this.firepadDefaultStyles.fontSize)) break;
           var size = null;
           var allowedValues = ['px','pt','%','em','xx-small','x-small','small','medium','large','x-large','xx-large','smaller','larger'];
           if (firepad.utils.stringEndsWith(val, allowedValues)) {
@@ -5090,6 +5171,7 @@ firepad.ParseHtml = (function () {
           }
           break;
         case 'font-family':
+          if (styleEqual(val, this.firepadDefaultStyles.fontFamily)) break;
           var font = firepad.utils.trim(val.split(',')[0]); // get first font.
           font = font.replace(/['"]/g, ''); // remove quotes.
           font = font.replace(/\w\S*/g, function(txt){return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase() });
@@ -5464,7 +5546,7 @@ firepad.Headless = (function() {
     }
 
     self.initializeFakeDom(function() {
-      var textPieces = ParseHtml(html, self.entityManager_);
+      var textPieces = ParseHtml(html, self.entityManager_, self.codeMirror_);
       var inserts    = firepad.textPiecesToInserts(true, textPieces);
       var op         = new TextOperation();
 
@@ -5741,6 +5823,32 @@ firepad.Firepad = (function(global) {
     return this.getHtmlFromRange(null, null);
   };
 
+  Firepad.prototype.selectionHasAttributes = function() {
+    var startPos = this.codeMirror_.getCursor('start'), endPos = this.codeMirror_.getCursor('end');
+    var startIndex = this.codeMirror_.indexFromPos(startPos), endIndex = this.codeMirror_.indexFromPos(endPos);
+    return this.rangeHasAttributes(startIndex, endIndex);
+  };
+
+  Firepad.prototype.rangeHasAttributes = function(start, end) {
+    this.assertReady_('rangeHasAttributes');
+    var doc = (start != null && end != null) ?
+      this.getOperationForSpan(start, end) :
+      this.getOperationForSpan(0, this.codeMirror_.getValue().length);
+
+    var op;
+    for (var i = 0; i < doc.ops.length; i++) {
+      op = doc.ops[i];
+      for (var prop in op.attributes) {
+        if (!op.attributes.hasOwnProperty(prop)) continue;
+        if (prop==ATTR.LINE_SENTINEL) continue;
+        for(var validAttr in firepad.AttributeConstants) if (firepad.AttributeConstants[validAttr] === prop) return true; // found one
+      }
+    }
+
+    return false;
+  };
+
+
   Firepad.prototype.getHtmlFromSelection = function() {
     var startPos = this.codeMirror_.getCursor('start'), endPos = this.codeMirror_.getCursor('end');
     var startIndex = this.codeMirror_.indexFromPos(startPos), endIndex = this.codeMirror_.indexFromPos(endPos);
@@ -5756,7 +5864,7 @@ firepad.Firepad = (function(global) {
   };
 
   Firepad.prototype.insertHtml = function (index, html) {
-    var lines = firepad.ParseHtml(html, this.entityManager_);
+    var lines = firepad.ParseHtml(html, this.entityManager_, this.codeMirror_);
     this.insertText(index, lines);
   };
 
@@ -5765,8 +5873,7 @@ firepad.Firepad = (function(global) {
   };
 
   Firepad.prototype.setHtml = function (html) {
-    var lines = firepad.ParseHtml(html, this.entityManager_);
-    console.log('lines: ', lines);
+    var lines = firepad.ParseHtml(html, this.entityManager_, this.codeMirror_);
     this.setText(lines);
   };
 
