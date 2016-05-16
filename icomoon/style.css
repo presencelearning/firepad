@@ -1,0 +1,66 @@
+@font-face {
+    font-family: 'firepad';
+    src:    url('fonts/firepad.eot?3pg65p');
+    src:    url('fonts/firepad.eot?3pg65p#iefix') format('embedded-opentype'),
+        url('fonts/firepad.ttf?3pg65p') format('truetype'),
+        url('fonts/firepad.woff?3pg65p') format('woff'),
+        url('fonts/firepad.svg?3pg65p#firepad') format('svg');
+    font-weight: normal;
+    font-style: normal;
+}
+
+[class^="icon-"], [class*=" icon-"] {
+    /* use !important to prevent issues with browser extensions that change fonts */
+    font-family: 'firepad' !important;
+    speak: none;
+    font-style: normal;
+    font-weight: normal;
+    font-variant: normal;
+    text-transform: none;
+    line-height: 1;
+
+    /* Better Font Rendering =========== */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-bold:before {
+    content: "\e900";
+}
+.icon-italic:before {
+    content: "\e901";
+}
+.icon-strikethrough:before {
+    content: "\e902";
+}
+.icon-underline:before {
+    content: "\e903";
+}
+.icon-list-bullet:before {
+    content: "\e904";
+}
+.icon-list-number:before {
+    content: "\e905";
+}
+.icon-align-left:before {
+    content: "\e906";
+}
+.icon-align-center:before {
+    content: "\e907";
+}
+.icon-align-right:before {
+    content: "\e908";
+}
+.icon-undo:before {
+    content: "\e909";
+}
+.icon-redo:before {
+    content: "\e90a";
+}
+.icon-paragraph-indent-left:before {
+    content: "\e90b";
+}
+.icon-paragraph-indent-right:before {
+    content: "\e90c";
+}
+

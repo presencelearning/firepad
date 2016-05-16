@@ -9,7 +9,7 @@
   "homepage": "http://www.firepad.io/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/firebase/firepad.git"
+    "url": "https://github.com/presencelearning/firepad.git"
   },
   "browser": {
     "jsdom": false
@@ -31,13 +31,7 @@
     "realtime",
     "collaborative"
   ],
-  "main": "dist/firepad.min.js",
-  "files": [
-    "dist/**",
-    "LICENSE",
-    "README.md",
-    "package.json"
-  ],
+  "main": "dist/firepad.js",
   "dependencies": {
     "jsdom": ">3",
     "firebase": "2.x"
