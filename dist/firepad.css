@@ -247,16 +247,29 @@ a.firepad-btn-highlight {
 
 .firepad-dialog-div {
   position: relative;
-  width: 400px;
-  height: 100px;
+  width: 325px;
+  height: 170px;
   margin: 100px auto;
-  background-color: #fff;
-  border: 1px solid #000;
+  background-color: #edeeef;
+  border: 1px solid #b6b8ba;
+  border-radius: 4px;
   padding: 15px;
+  text-align: center;
+}
+
+.firepad-dialog-header {
+  font-family: "Roboto", sans-serif;
+  font-size: 16px;
+  font-weight: normal;
+}
+
+.firepad-feedback {
+  color: red;
+  height: 1.8em;
 }
 
 .firepad-dialog-input {
-  width: 80%;
+  width: 90%;
   display: block;
   padding: 5px 5px;
   margin: 10px 10px 10px 5px;
