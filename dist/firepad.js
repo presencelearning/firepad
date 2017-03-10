@@ -1365,7 +1365,7 @@ firepad.FirebaseAdapter = (function (global) {
       console.log('firebase ref is: ', ref);
       console.log('firebase ref.root is: ', ref.root);
 
-      var connectedRef = firebase.database().ref('.info/connected')
+      var connectedRef = ref.root.child('.info/connected')
 
 
       this.firebaseOn_(connectedRef, 'value', function(snapshot) {
@@ -5469,7 +5469,6 @@ firepad.Firepad = (function(global) {
   var LIST_TYPE = firepad.LineFormatting.LIST_TYPE;
 
   function Firepad(ref, place, options) {
-    alert('new firepad!');
     if (!(this instanceof Firepad)) { return new Firepad(ref, place, options); }
 
     if (!CodeMirror && !ace) {
