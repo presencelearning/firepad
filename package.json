@@ -1,8 +1,7 @@
 {
   "name": "firepad",
   "description": "Collaborative text editing powered by Firebase",
-  "version": "0.1.0",
-  "author": "Firebase <support@firebase.com> (https://www.firebase.com/)",
+  "version": "1.4.0",
   "contributors": [
     "Michael Lehenbauer <michael@firebase.com>"
   ],
@@ -34,7 +33,7 @@
   "main": "dist/firepad.js",
   "dependencies": {
     "jsdom": ">3",
-    "firebase": "2.x"
+    "firebase": "3.x.x"
   },
   "devDependencies": {
     "coveralls": "^2.11.2",
