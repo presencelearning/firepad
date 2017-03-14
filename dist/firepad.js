@@ -868,6 +868,11 @@ firepad.TextOperation = (function () {
     return [operation1prime, operation2prime];
   };
 
+  // convenience method to write transform(a, b) as a.transform(b)
+  TextOperation.prototype.transform = function(other) {
+    return TextOperation.transform(this, other);
+  };
+
   return TextOperation;
 }());
 
@@ -1319,8 +1324,8 @@ var firepad = firepad || { };
 
 firepad.FirebaseAdapter = (function (global) {
 
-  if (typeof require === 'function' && typeof Firebase !== 'function') {
-    Firebase = require('firebase');
+  if (typeof firebase === "undefined" && typeof require === 'function' && typeof Firebase !== 'function') {
+    firebase = require('firebase');
   }
 
   var TextOperation = firepad.TextOperation;
@@ -1357,7 +1362,13 @@ firepad.FirebaseAdapter = (function (global) {
       this.setColor(userColor);
       this.setDisplayName(userDisplayName);
 
-      this.firebaseOn_(ref.root().child('.info/connected'), 'value', function(snapshot) {
+      console.log('firebase ref is: ', ref);
+      console.log('firebase ref.root is: ', ref.root);
+
+      var connectedRef = ref.root.child('.info/connected')
+
+
+      this.firebaseOn_(connectedRef, 'value', function(snapshot) {
         if (snapshot.val() === true) {
           self.initializeUserData_();
         }
@@ -1368,7 +1379,7 @@ firepad.FirebaseAdapter = (function (global) {
         self.monitorCursors_();
       });
     } else {
-      this.userId_ = ref.push().key();
+      this.userId_ = ref.push().key;
     }
 
     // Avoid triggering any events until our callers have had a chance to attach their listeners.
@@ -1477,7 +1488,7 @@ firepad.FirebaseAdapter = (function (global) {
     }
 
     this.sent_ = { id: revisionId, op: operation };
-    doTransaction(revisionId, { a: self.userId_, o: operation.toJSON(), t: Firebase.ServerValue.TIMESTAMP });
+    doTransaction(revisionId, { a: self.userId_, o: operation.toJSON(), t: firebase.database.ServerValue.TIMESTAMP });
   };
 
   FirebaseAdapter.prototype.sendCursor = function (obj) {
@@ -1519,7 +1530,7 @@ firepad.FirebaseAdapter = (function (global) {
     var usersRef = this.ref_.child('users'), self = this;
 
     function childChanged(childSnap) {
-      var userId = childSnap.key();
+      var userId = childSnap.key;
       var userData = childSnap.val();
       self.trigger('cursor', userId, userData.cursor, userData.color, userData.displayName);
     }
@@ -1528,7 +1539,7 @@ firepad.FirebaseAdapter = (function (global) {
     this.firebaseOn_(usersRef, 'child_changed', childChanged);
 
     this.firebaseOn_(usersRef, 'child_removed', function(childSnap) {
-      var userId = childSnap.key();
+      var userId = childSnap.key;
       self.trigger('cursor', userId, null);
     });
   };
@@ -1556,7 +1567,7 @@ firepad.FirebaseAdapter = (function (global) {
 
     setTimeout(function() {
       self.firebaseOn_(historyRef, 'child_added', function(revisionSnapshot) {
-        var revisionId = revisionSnapshot.key();
+        var revisionId = revisionSnapshot.key;
         self.pendingReceivedRevisions_[revisionId] = revisionSnapshot.val();
         if (self.ready_) {
           self.handlePendingReceivedRevisions_();
@@ -1957,12 +1968,16 @@ firepad.WrappedOperation = (function (global) {
   }
 
   WrappedOperation.transform = function (a, b) {
-    var transform = a.wrapped.constructor.transform;
-    var pair = transform(a.wrapped, b.wrapped);
+    var pair = a.wrapped.transform(b.wrapped);
     return [
       new WrappedOperation(pair[0], transformMeta(a.meta, b.wrapped)),
       new WrappedOperation(pair[1], transformMeta(b.meta, a.wrapped))
     ];
+  };
+
+  // convenience method to write transform(a, b) as a.transform(b)
+  WrappedOperation.prototype.transform = function(other) {
+    return WrappedOperation.transform(this, other);
   };
 
   return WrappedOperation;
@@ -2171,7 +2186,7 @@ firepad.Client = (function () {
     //  (can be applied  \/
     //  to the client's
     //  current document)
-    var pair = operation.constructor.transform(this.outstanding, operation);
+    var pair = this.outstanding.transform(operation);
     client.applyOperation(pair[1]);
     return new AwaitingConfirm(pair[0]);
   };
@@ -2220,9 +2235,8 @@ firepad.Client = (function () {
     // document
     //
     // * pair1[1]
-    var transform = operation.constructor.transform;
-    var pair1 = transform(this.outstanding, operation);
-    var pair2 = transform(this.buffer, pair1[1]);
+    var pair1 = this.outstanding.transform(operation);
+    var pair2 = this.buffer.transform(pair1[1]);
     client.applyOperation(pair2[1]);
     return new AwaitingWithBuffer(pair1[0], pair2[0]);
   };
@@ -2278,8 +2292,6 @@ firepad.EditorClient = (function () {
   function OtherClient (id, editorAdapter) {
     this.id = id;
     this.editorAdapter = editorAdapter;
-
-    this.li = document.createElement('li');
   }
 
   OtherClient.prototype.setColor = function (color) {
@@ -4256,44 +4268,6 @@ firepad.RichTextCodeMirrorAdapter = (function () {
     return [operation, inverse];
   };
 
-  // Apply an operation to a CodeMirror instance.
-  RichTextCodeMirrorAdapter.applyOperationToCodeMirror = function (operation, rtcm) {
-
-    // HACK: If there are a lot of operations; hide CodeMirror so that it doesn't re-render constantly.
-    if (operation.ops.length > 10)
-      rtcm.codeMirror.getWrapperElement().setAttribute('style', 'display: none');
-
-    var ops = operation.ops;
-    var index = 0; // holds the current index into CodeMirror's content
-    for (var i = 0, l = ops.length; i < l; i++) {
-      var op = ops[i];
-      if (op.isRetain()) {
-        if (!emptyAttributes(op.attributes)) {
-          rtcm.updateTextAttributes(index, index + op.chars, function(attributes) {
-            for(var attr in op.attributes) {
-              if (op.attributes[attr] === false) {
-                delete attributes[attr];
-              } else {
-                attributes[attr] = op.attributes[attr];
-              }
-            }
-          }, 'RTCMADAPTER', /*doLineAttributes=*/true);
-        }
-        index += op.chars;
-      } else if (op.isInsert()) {
-        rtcm.insertText(index, op.text, op.attributes, 'RTCMADAPTER');
-        index += op.text.length;
-      } else if (op.isDelete()) {
-        rtcm.removeText(index, index + op.chars, 'RTCMADAPTER');
-      }
-    }
-
-    if (operation.ops.length > 10) {
-      rtcm.codeMirror.getWrapperElement().setAttribute('style', '');
-      rtcm.codeMirror.refresh();
-    }
-  };
-
   RichTextCodeMirrorAdapter.prototype.registerCallbacks = function (cb) {
     this.callbacks = cb;
   };
@@ -4440,8 +4414,41 @@ firepad.RichTextCodeMirrorAdapter = (function () {
     if (action) { action.apply(this, args); }
   };
 
+  // Apply an operation to a CodeMirror instance.
   RichTextCodeMirrorAdapter.prototype.applyOperation = function (operation) {
-    RichTextCodeMirrorAdapter.applyOperationToCodeMirror(operation, this.rtcm);
+    // HACK: If there are a lot of operations; hide CodeMirror so that it doesn't re-render constantly.
+    if (operation.ops.length > 10)
+      this.rtcm.codeMirror.getWrapperElement().setAttribute('style', 'display: none');
+
+    var ops = operation.ops;
+    var index = 0; // holds the current index into CodeMirror's content
+    for (var i = 0, l = ops.length; i < l; i++) {
+      var op = ops[i];
+      if (op.isRetain()) {
+        if (!emptyAttributes(op.attributes)) {
+          this.rtcm.updateTextAttributes(index, index + op.chars, function(attributes) {
+            for(var attr in op.attributes) {
+              if (op.attributes[attr] === false) {
+                delete attributes[attr];
+              } else {
+                attributes[attr] = op.attributes[attr];
+              }
+            }
+          }, 'RTCMADAPTER', /*doLineAttributes=*/true);
+        }
+        index += op.chars;
+      } else if (op.isInsert()) {
+        this.rtcm.insertText(index, op.text, op.attributes, 'RTCMADAPTER');
+        index += op.text.length;
+      } else if (op.isDelete()) {
+        this.rtcm.removeText(index, index + op.chars, 'RTCMADAPTER');
+      }
+    }
+
+    if (operation.ops.length > 10) {
+      this.rtcm.codeMirror.getWrapperElement().setAttribute('style', '');
+      this.rtcm.codeMirror.refresh();
+    }
   };
 
   RichTextCodeMirrorAdapter.prototype.registerUndo = function (undoFn) {
@@ -5298,7 +5305,6 @@ var firepad = firepad || { };
  * Instance of headless Firepad for use in NodeJS. Supports get/set on text/html.
  */
 firepad.Headless = (function() {
-
   var TextOperation   = firepad.TextOperation;
   var FirebaseAdapter = firepad.FirebaseAdapter;
   var EntityManager   = firepad.EntityManager;
@@ -5308,15 +5314,18 @@ firepad.Headless = (function() {
     // Allow calling without new.
     if (!(this instanceof Headless)) { return new Headless(refOrPath); }
 
+    var firebase, ref;
     if (typeof refOrPath === 'string') {
-      if (typeof Firebase !== 'function') {
-        var firebase = require('firebase');
+      if (window.firebase === undefined && typeof firebase !== 'object') {
+            console.log("REQUIRING");
+        firebase = require('firebase');
       } else {
-        var firebase = Firebase;
+        firebase = window.firebase;
       }
-      var ref = new firebase(refOrPath);
+
+      ref = firebase.database().refFromURL(refOrPath);
     } else {
-      var ref = refOrPath;
+      ref = refOrPath;
     }
 
     this.entityManager_  = new EntityManager();
@@ -5517,7 +5526,7 @@ firepad.Firepad = (function(global) {
     if (this.codeMirror_)
       this.codeMirror_.refresh();
 
-    var userId = this.getOption('userId', ref.push().key());
+    var userId = this.getOption('userId', ref.push().key);
     var userDisplayName = this.getOption('userDisplayName', userId);
     var userColor = this.getOption('userColor', colorFromUserId(userId));
 

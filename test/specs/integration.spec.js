@@ -2,6 +2,7 @@ describe('Integration tests', function() {
   var h = helpers;
   var Firepad = firepad.Firepad;
   var Headless = Firepad.Headless;
+  var extendedTimeoutLength = 300000;
 
   var _hiddenDiv;
   function hiddenDiv() {
@@ -45,21 +46,25 @@ describe('Integration tests', function() {
     });
   }
 
+  var rootRef;
+
   beforeEach(function(done) {
     // Make sure we're connected to Firebase.  This can take a while on slow
     // connections.
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com/.info/connected');
+    rootRef = firebase.database().ref();
+    var connectedRef = rootRef.child('.info/connected');
     var connected = false;
-    var listener = ref.on('value', function(s) {
+    var listener = connectedRef.on('value', function(s) {
       if (s.val() == true) {
         done();
-        ref.off('value', listener);
+        connectedRef.off('value', listener);
       }
     });
-  });
+  }, extendedTimeoutLength);
 
+  // Passes locally, but times out of Travis regardless of timeout interval
   it('Out-of-order edit', function (done) {
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
+    var ref = rootRef.push();
     var cm1 = CodeMirror(hiddenDiv());
     var cm2 = CodeMirror(hiddenDiv());
     var firepad1 = new Firepad(ref, cm1);
@@ -78,10 +83,11 @@ describe('Integration tests', function() {
         }
       });
     });
-  });
+  }, extendedTimeoutLength);
 
+  // Passes locally, but times out of Travis regardless of timeout interval
   it('Random text changes', function(done) {
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
+    var ref = rootRef.push();
     var cm1 = CodeMirror(hiddenDiv());
     var cm2 = CodeMirror(hiddenDiv());
     var firepad1 = new Firepad(ref, cm1);
@@ -105,10 +111,10 @@ describe('Integration tests', function() {
       firepad1.setText('lorem ipsum');
       step(25);
     });
-  });
+  }, extendedTimeoutLength);
 
   it('Performs getHtml responsively', function(done) {
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
+    var ref = rootRef.push();
     var cm = CodeMirror(hiddenDiv());
     var firepad = new Firepad(ref, cm);
 
@@ -118,10 +124,10 @@ describe('Integration tests', function() {
       expect(firepad.getHtml()).toContain(html);
       done();
     });
-  });
+  }, extendedTimeoutLength);
 
   it('Uses defaultText to initialize the pad properly', function(done) {
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
+    var ref = rootRef.push();
     var cm = CodeMirror(hiddenDiv());
     var cm2 = CodeMirror(hiddenDiv());
     var text = 'This should be the starting text';
@@ -145,11 +151,11 @@ describe('Integration tests', function() {
   });
 
   it('Emits sync events as users edit the pad', function(done) {
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
+    var ref = rootRef.push();
     var cm = CodeMirror(hiddenDiv());
     var firepad = new Firepad(ref, cm, { defaultText: 'XXXXXXXX' });
     var startedSyncing = false;
-    
+
     firepad.on('ready', function() {
       randomOperation(cm);
       firepad.on('synced', function(synced) {
@@ -166,7 +172,7 @@ describe('Integration tests', function() {
   });
 
   it('Performs Firepad.dispose', function(done){
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
+    var ref = rootRef.push();
     var cm = CodeMirror(hiddenDiv());
     var firepad = new Firepad(ref, cm, { defaultText: "It\'s alive." });
 
@@ -185,7 +191,7 @@ describe('Integration tests', function() {
   });
 
   it('Safely performs Firepad.dispose immediately after construction', function(){
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
+    var ref =rootRef.push();
     var cm = CodeMirror(hiddenDiv());
     var firepad = new Firepad(ref, cm);
 
@@ -195,7 +201,7 @@ describe('Integration tests', function() {
   });
 
   it('Performs headless get/set plaintext & dispose', function(done){
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
+    var ref = rootRef.push();
     var cm = CodeMirror(hiddenDiv());
     var firepadCm = new Firepad(ref, cm);
     var firepadHeadless = new Headless(ref);
@@ -219,7 +225,7 @@ describe('Integration tests', function() {
   });
 
   it('Performs headless get/set html & dispose', function(done) {
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
+    var ref = rootRef.push();
     var cm = CodeMirror(hiddenDiv());
     var firepadCm = new Firepad(ref, cm);
     var firepadHeadless = new Headless(ref);
@@ -268,10 +274,9 @@ describe('Integration tests', function() {
   });
 
   it('Headless firepad takes a string path as well', function(done) {
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
-    var path = 'https://firepad-test.firebaseio-demo.com/' + ref.key();
+    var ref = rootRef.push();
     var text = 'Hello from headless firepad!';
-    var firepadHeadless = new Headless(path);
+    var firepadHeadless = new Headless(ref.toString());
 
     firepadHeadless.setText(text, function() {
       firepadHeadless.getText(function(headlessText) {
@@ -282,7 +287,7 @@ describe('Integration tests', function() {
   });
 
   it('Ace editor', function (done) {
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
+    var ref = rootRef.push();
 
     var editor = ace.edit(hiddenDiv().appendChild(document.createElement('div')));
 
@@ -297,7 +302,7 @@ describe('Integration tests', function() {
   });
 
   it('Safely performs Headless.dispose immediately after construction', function(){
-    var ref = new Firebase('https://firepad-test.firebaseio-demo.com').push();
+    var ref = rootRef.push();
     var firepadHeadless = new Headless(ref);
 
     expect(function() {
