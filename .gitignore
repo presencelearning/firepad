@@ -10,3 +10,5 @@ test/coverage/
 # generated
 lib/ace-adapter.js
 dist/firepad.zip
+
+*.log

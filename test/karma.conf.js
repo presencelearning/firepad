@@ -21,12 +21,12 @@ module.exports = function(config) {
       ]
     },
 
-    browserNoActivityTimeout: 30000,
+    browserNoActivityTimeout: 60000,
 
     files: [
       "../bower_components/codemirror/lib/codemirror.js",
       "../bower_components/firebase/firebase.js",
-      "./vendor/ace-1.2.0.js",
+      "./vendor/ace-1.2.5.js",
 
       "../lib/utils.js",
       "../lib/span.js",
