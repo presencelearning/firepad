@@ -1,14 +1,35 @@
 {
-  "name": "firepad",
-  "description": "Collaborative text editing powered by Firebase",
-  "version": "1.4.0",
-  "contributors": [
-    "Michael Lehenbauer <michael@firebase.com>"
-  ],
-  "homepage": "http://www.firepad.io/",
-  "repository": {
+  "_from": "git+ssh://git@github.com/presencelearning/firepad.git#deadpool",
+  "_id": "firepad@1.4.0",
+  "_inBundle": false,
+  "_integrity": "sha1-2v0+2KEA8WxczHY/kj2QYe+PHJw=",
+  "_location": "/firepad",
+  "_phantomChildren": {
+    "dom-storage": "2.0.2",
+    "faye-websocket": "0.9.3",
+    "jsonwebtoken": "7.4.3",
+    "promise-polyfill": "6.0.2",
+    "xmlhttprequest": "1.8.0"
+  },
+  "_requested": {
     "type": "git",
-    "url": "https://github.com/presencelearning/firepad.git"
+    "raw": "firepad@git+ssh://git@github.com/presencelearning/firepad.git#deadpool",
+    "name": "firepad",
+    "escapedName": "firepad",
+    "rawSpec": "git+ssh://git@github.com/presencelearning/firepad.git#deadpool",
+    "saveSpec": "git+ssh://git@github.com/presencelearning/firepad.git#deadpool",
+    "fetchSpec": "ssh://git@github.com/presencelearning/firepad.git",
+    "gitCommittish": "deadpool"
+  },
+  "_requiredBy": [
+    "/"
+  ],
+  "_resolved": "git+ssh://git@github.com/presencelearning/firepad.git#5df1ebf3a1ce0608bf9bac9942c7548f8a5123a1",
+  "_spec": "firepad@git+ssh://git@github.com/presencelearning/firepad.git#deadpool",
+  "_where": "/Users/jhanink/projects/pl/lightyear",
+  "author": {
+    "name": "Firebase",
+    "url": "https://firebase.google.com/"
   },
   "browser": {
     "jsdom": false
@@ -16,25 +37,19 @@
   "bugs": {
     "url": "https://github.com/firebase/firepad/issues"
   },
-  "licenses": [
+  "bundleDependencies": false,
+  "contributors": [
     {
-      "type": "MIT",
-      "url": "http://firebase.mit-license.org/"
+      "name": "Michael Lehenbauer",
+      "email": "michael@firebase.com"
     }
   ],
-  "keywords": [
-    "text",
-    "word",
-    "editor",
-    "firebase",
-    "realtime",
-    "collaborative"
-  ],
-  "main": "dist/firepad.js",
   "dependencies": {
-    "jsdom": ">3",
-    "firebase": "3.x.x"
+    "firebase": "3.x.x",
+    "jsdom": ">3"
   },
+  "deprecated": false,
+  "description": "Collaborative text editing powered by Firebase",
   "devDependencies": {
     "coveralls": "^2.11.2",
     "grunt": "~0.4.5",
@@ -51,13 +66,36 @@
     "karma-coverage": "^0.2.6",
     "karma-failed-reporter": "0.0.2",
     "karma-jasmine": "^0.3.6",
-    "karma-phantomjs-launcher": "~0.1.0",
-    "karma-spec-reporter": "0.0.13"
+    "karma-phantomjs-launcher": "~1.0.0",
+    "karma-spec-reporter": "0.0.13",
+    "phantomjs-prebuilt": "2.1.4"
+  },
+  "homepage": "http://www.firepad.io/",
+  "keywords": [
+    "text",
+    "word",
+    "editor",
+    "firebase",
+    "realtime",
+    "collaborative"
+  ],
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "http://firebase.mit-license.org/"
+    }
+  ],
+  "main": "dist/firepad.js",
+  "name": "firepad",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/presencelearning/firepad.git"
   },
   "scripts": {
-    "test": "grunt test",
-    "travis": "grunt",
+    "build": "grunt build",
     "dev": "grunt watch",
-    "build": "grunt build"
-  }
+    "test": "grunt test",
+    "travis": "grunt"
+  },
+  "version": "1.4.0"
 }
