@@ -868,11 +868,6 @@ firepad.TextOperation = (function () {
     return [operation1prime, operation2prime];
   };
 
-  // convenience method to write transform(a, b) as a.transform(b)
-  TextOperation.prototype.transform = function(other) {
-    return TextOperation.transform(this, other);
-  };
-
   return TextOperation;
 }());
 
@@ -1324,8 +1319,8 @@ var firepad = firepad || { };
 
 firepad.FirebaseAdapter = (function (global) {
 
-  if (typeof firebase === "undefined" && typeof require === 'function' && typeof Firebase !== 'function') {
-    firebase = require('firebase');
+  if (typeof require === 'function' && typeof Firebase !== 'function') {
+    Firebase = require('firebase');
   }
 
   var TextOperation = firepad.TextOperation;
@@ -1334,7 +1329,7 @@ firepad.FirebaseAdapter = (function (global) {
   // Save a checkpoint every 100 edits.
   var CHECKPOINT_FREQUENCY = 100;
 
-  function FirebaseAdapter (ref, userId, userColor, userDisplayName) {
+  function FirebaseAdapter (ref, userId, userColor) {
     this.ref_ = ref;
     this.ready_ = false;
     this.firebaseCallbacks_ = [];
@@ -1360,13 +1355,8 @@ firepad.FirebaseAdapter = (function (global) {
     if (userId) {
       this.setUserId(userId);
       this.setColor(userColor);
-      this.setDisplayName(userDisplayName);
 
-
-      var connectedRef = ref.root.child('.info/connected')
-
-
-      this.firebaseOn_(connectedRef, 'value', function(snapshot) {
+      this.firebaseOn_(ref.root().child('.info/connected'), 'value', function(snapshot) {
         if (snapshot.val() === true) {
           self.initializeUserData_();
         }
@@ -1377,7 +1367,7 @@ firepad.FirebaseAdapter = (function (global) {
         self.monitorCursors_();
       });
     } else {
-      this.userId_ = ref.push().key;
+      this.userId_ = ref.push().key();
     }
 
     // Avoid triggering any events until our callers have had a chance to attach their listeners.
@@ -1404,7 +1394,6 @@ firepad.FirebaseAdapter = (function (global) {
     if (this.userRef_) {
       this.userRef_.child('cursor').remove();
       this.userRef_.child('color').remove();
-      this.userRef_.child('displayName').remove();
     }
 
     this.ref_ = null;
@@ -1420,8 +1409,6 @@ firepad.FirebaseAdapter = (function (global) {
       this.userRef_.child('cursor').onDisconnect().cancel();
       this.userRef_.child('color').remove();
       this.userRef_.child('color').onDisconnect().cancel();
-      this.userRef_.child('displayName').remove();
-      this.userRef_.child('displayName').onDisconnect().cancel();
     }
 
     this.userId_ = userId;
@@ -1486,7 +1473,7 @@ firepad.FirebaseAdapter = (function (global) {
     }
 
     this.sent_ = { id: revisionId, op: operation };
-    doTransaction(revisionId, { a: self.userId_, o: operation.toJSON(), t: firebase.database.ServerValue.TIMESTAMP });
+    doTransaction(revisionId, { a: self.userId_, o: operation.toJSON(), t: Firebase.ServerValue.TIMESTAMP });
   };
 
   FirebaseAdapter.prototype.sendCursor = function (obj) {
@@ -1497,11 +1484,6 @@ firepad.FirebaseAdapter = (function (global) {
   FirebaseAdapter.prototype.setColor = function(color) {
     this.userRef_.child('color').set(color);
     this.color_ = color;
-  };
-
-  FirebaseAdapter.prototype.setDisplayName = function(displayName) {
-    this.userRef_.child('displayName').set(displayName);
-    this.displayName_ = displayName;
   };
 
   FirebaseAdapter.prototype.getDocument = function() {
@@ -1517,27 +1499,25 @@ firepad.FirebaseAdapter = (function (global) {
   FirebaseAdapter.prototype.initializeUserData_ = function() {
     this.userRef_.child('cursor').onDisconnect().remove();
     this.userRef_.child('color').onDisconnect().remove();
-    this.userRef_.child('displayName').onDisconnect().remove();
 
     this.sendCursor(this.cursor_ || null);
     this.setColor(this.color_ || null);
-    this.setDisplayName(this.displayName_ || null);
   };
 
   FirebaseAdapter.prototype.monitorCursors_ = function() {
     var usersRef = this.ref_.child('users'), self = this;
 
     function childChanged(childSnap) {
-      var userId = childSnap.key;
+      var userId = childSnap.key();
       var userData = childSnap.val();
-      self.trigger('cursor', userId, userData.cursor, userData.color, userData.displayName);
+      self.trigger('cursor', userId, userData.cursor, userData.color);
     }
 
     this.firebaseOn_(usersRef, 'child_added', childChanged);
     this.firebaseOn_(usersRef, 'child_changed', childChanged);
 
     this.firebaseOn_(usersRef, 'child_removed', function(childSnap) {
-      var userId = childSnap.key;
+      var userId = childSnap.key();
       self.trigger('cursor', userId, null);
     });
   };
@@ -1565,7 +1545,7 @@ firepad.FirebaseAdapter = (function (global) {
 
     setTimeout(function() {
       self.firebaseOn_(historyRef, 'child_added', function(revisionSnapshot) {
-        var revisionId = revisionSnapshot.key;
+        var revisionId = revisionSnapshot.key();
         self.pendingReceivedRevisions_[revisionId] = revisionSnapshot.val();
         if (self.ready_) {
           self.handlePendingReceivedRevisions_();
@@ -1745,33 +1725,21 @@ var firepad = firepad || { };
 firepad.RichTextToolbar = (function(global) {
   var utils = firepad.utils;
 
-  function RichTextToolbar(imageInsertionUI, showPrint) {
+  function RichTextToolbar(imageInsertionUI) {
     this.imageInsertionUI = imageInsertionUI;
-    this.showPrint = showPrint;
     this.element_ = this.makeElement_();
   }
 
   utils.makeEventEmitter(RichTextToolbar, ['bold', 'italic', 'underline', 'strike', 'font', 'font-size', 'color',
     'left', 'center', 'right', 'unordered-list', 'ordered-list', 'todo-list', 'indent-increase', 'indent-decrease',
-                                           'undo', 'redo', 'insert-image', 'print']);
+                                           'undo', 'redo', 'insert-image']);
 
   RichTextToolbar.prototype.element = function() { return this.element_; };
-
-  function capitalize(text) {
-    return text.charAt(0).toUpperCase() + text.slice(1);
-  }
 
   RichTextToolbar.prototype.makeButton_ = function(eventName, iconName) {
     var self = this;
     iconName = iconName || eventName;
-    var btn = utils.elt('a', [utils.elt('span', '', { 'class': 'firepad-tb-' + iconName } )], { 'class': 'firepad-btn', 'title': capitalize(eventName)});
-    utils.on(btn, 'click', utils.stopEventAnd(function() { self.trigger(eventName); }));
-    return btn;
-  }
-  RichTextToolbar.prototype.makeTextButton_ = function(eventName, iconName) {
-    var self = this;
-    iconName = iconName || eventName;
-    var btn = utils.elt('a', [utils.elt('span', iconName )], { 'class': 'firepad-btn' });
+    var btn = utils.elt('a', [utils.elt('span', '', { 'class': 'firepad-tb-' + iconName } )], { 'class': 'firepad-btn' });
     utils.on(btn, 'click', utils.stopEventAnd(function() { self.trigger(eventName); }));
     return btn;
   }
@@ -1788,14 +1756,11 @@ firepad.RichTextToolbar = (function(global) {
       utils.elt('div', [fontSize], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [color], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [self.makeButton_('bold'), self.makeButton_('italic'), self.makeButton_('underline'), self.makeButton_('strike', 'strikethrough')], { 'class': 'firepad-btn-group'}),
-      utils.elt('div', [self.makeButton_('unordered-list', 'list-2'), self.makeButton_('ordered-list', 'numbered-list')], { 'class': 'firepad-btn-group'}),
+      utils.elt('div', [self.makeButton_('unordered-list', 'list-2'), self.makeButton_('ordered-list', 'numbered-list'), self.makeButton_('todo-list', 'list')], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [self.makeButton_('indent-decrease'), self.makeButton_('indent-increase')], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [self.makeButton_('left', 'paragraph-left'), self.makeButton_('center', 'paragraph-center'), self.makeButton_('right', 'paragraph-right')], { 'class': 'firepad-btn-group'}),
       utils.elt('div', [self.makeButton_('undo'), self.makeButton_('redo')], { 'class': 'firepad-btn-group'})
     ];
-    if(this.showPrint) {
-      toolbarOptions.push(utils.elt('div', [self.makeButton_('print')], { 'class': 'firepad-btn-group'}));
-    }
 
     if (self.imageInsertionUI) {
       toolbarOptions.push(utils.elt('div', [self.makeButton_('insert-image')], { 'class': 'firepad-btn-group' }));
@@ -1810,7 +1775,7 @@ firepad.RichTextToolbar = (function(global) {
 
   RichTextToolbar.prototype.makeFontDropdown_ = function() {
     // NOTE: There must be matching .css styles in firepad.css.
-    var fonts = ['Arial', 'Arial Black', 'Comic Sans MS', 'Courier New', 'Georgia', 'Impact', 'Lucida Console', 'Lucida Grande', 'Palatino', 'Print Practice', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
+    var fonts = ['Arial', 'Comic Sans MS', 'Courier New', 'Impact', 'Times New Roman', 'Verdana'];
 
     var items = [];
     for(var i = 0; i < fonts.length; i++) {
@@ -1835,7 +1800,7 @@ firepad.RichTextToolbar = (function(global) {
   };
 
   RichTextToolbar.prototype.makeColorDropdown_ = function() {
-    var colors = ['#000000', '#747678', '#4D8BBE', '#85D4F7', '#D0021B', '#F9B417', '#78A240', '#B665A6', '#FF6C98'];
+    var colors = ['black', 'red', 'green', 'blue', 'yellow', 'cyan', 'magenta', 'grey'];
 
     var items = [];
     for(var i = 0; i < colors.length; i++) {
@@ -1966,16 +1931,12 @@ firepad.WrappedOperation = (function (global) {
   }
 
   WrappedOperation.transform = function (a, b) {
-    var pair = a.wrapped.transform(b.wrapped);
+    var transform = a.wrapped.constructor.transform;
+    var pair = transform(a.wrapped, b.wrapped);
     return [
       new WrappedOperation(pair[0], transformMeta(a.meta, b.wrapped)),
       new WrappedOperation(pair[1], transformMeta(b.meta, a.wrapped))
     ];
-  };
-
-  // convenience method to write transform(a, b) as a.transform(b)
-  WrappedOperation.prototype.transform = function(other) {
-    return WrappedOperation.transform(this, other);
   };
 
   return WrappedOperation;
@@ -2184,7 +2145,7 @@ firepad.Client = (function () {
     //  (can be applied  \/
     //  to the client's
     //  current document)
-    var pair = this.outstanding.transform(operation);
+    var pair = operation.constructor.transform(this.outstanding, operation);
     client.applyOperation(pair[1]);
     return new AwaitingConfirm(pair[0]);
   };
@@ -2233,8 +2194,9 @@ firepad.Client = (function () {
     // document
     //
     // * pair1[1]
-    var pair1 = this.outstanding.transform(operation);
-    var pair2 = this.buffer.transform(pair1[1]);
+    var transform = operation.constructor.transform;
+    var pair1 = transform(this.outstanding, operation);
+    var pair2 = transform(this.buffer, pair1[1]);
     client.applyOperation(pair2[1]);
     return new AwaitingWithBuffer(pair1[0], pair2[0]);
   };
@@ -2290,14 +2252,12 @@ firepad.EditorClient = (function () {
   function OtherClient (id, editorAdapter) {
     this.id = id;
     this.editorAdapter = editorAdapter;
+
+    this.li = document.createElement('li');
   }
 
   OtherClient.prototype.setColor = function (color) {
     this.color = color;
-  };
-
-  OtherClient.prototype.setDisplayName = function (displayName) {
-    this.displayName = displayName;
   };
 
   OtherClient.prototype.updateCursor = function (cursor) {
@@ -2306,8 +2266,7 @@ firepad.EditorClient = (function () {
     this.mark = this.editorAdapter.setOtherCursor(
       cursor,
       this.color,
-      this.id, 
-      this.displayName
+      this.id
     );
   };
 
@@ -2334,17 +2293,6 @@ firepad.EditorClient = (function () {
     this.editorAdapter.registerUndo(function () { self.undo(); });
     this.editorAdapter.registerRedo(function () { self.redo(); });
 
-    var expireTimers = [];
-    var scheduleCursorExpire = function(clientId) {
-      if(expireTimers[clientId]) {
-        clearTimeout(expireTimers[clientId]);
-      }
-      expireTimers[clientId] = setTimeout(function() {
-        var client = self.getClientObject(clientId);
-        client.removeCursor();
-      }, 3000);
-    }
-
     this.serverAdapter.registerCallbacks({
       ack: function () {
         self.serverAck();
@@ -2358,7 +2306,7 @@ firepad.EditorClient = (function () {
       operation: function (operation) {
         self.applyServer(operation);
       },
-      cursor: function (clientId, cursor, color, displayName) {
+      cursor: function (clientId, cursor, color) {
         if (self.serverAdapter.userId_ === clientId ||
             !(self.state instanceof Client.Synchronized)) {
           return;
@@ -2366,9 +2314,7 @@ firepad.EditorClient = (function () {
         var client = self.getClientObject(clientId);
         if (cursor) {
           if (color) client.setColor(color);
-          if (displayName) client.setDisplayName(displayName);
           client.updateCursor(Cursor.fromJSON(cursor));
-          scheduleCursorExpire(clientId);
         } else {
           client.removeCursor();
         }
@@ -2968,10 +2914,7 @@ firepad.RichTextCodeMirror = (function () {
 
     var self = this;
     this.annotationList_ = new AnnotationList(
-        function(oldNodes, newNodes) {
-          self.onAnnotationsChanged_(oldNodes, newNodes);
-          self.fixBullets();
-        });
+        function(oldNodes, newNodes) { self.onAnnotationsChanged_(oldNodes, newNodes); });
 
     // Ensure annotationList is in sync with any existing codemirror contents.
     this.initAnnotationList_();
@@ -2980,9 +2923,6 @@ firepad.RichTextCodeMirror = (function () {
     bind(this, 'onCodeMirrorChange_');
     bind(this, 'onCursorActivity_');
 
-    bind(this, 'onCodeMirrorCopyCut_');
-    bind(this, 'onCodeMirrorPaste_');
-
     if (parseInt(CodeMirror.version) >= 4) {
       this.codeMirror.on('changes', this.onCodeMirrorChange_);
     } else {
@@ -2990,10 +2930,6 @@ firepad.RichTextCodeMirror = (function () {
     }
     this.codeMirror.on('beforeChange', this.onCodeMirrorBeforeChange_);
     this.codeMirror.on('cursorActivity', this.onCursorActivity_);
-
-    this.codeMirror.on('copy', this.onCodeMirrorCopyCut_);
-    this.codeMirror.on('cut', this.onCodeMirrorCopyCut_);
-    this.codeMirror.on('paste', this.onCodeMirrorPaste_);
 
     this.changeId_ = 0;
     this.outstandingChanges_ = { };
@@ -3010,58 +2946,8 @@ firepad.RichTextCodeMirror = (function () {
     this.codeMirror.off('change', this.onCodeMirrorChange_);
     this.codeMirror.off('changes', this.onCodeMirrorChange_);
     this.codeMirror.off('cursorActivity', this.onCursorActivity_);
-
-    this.codeMirror.off('copy', this.onCodeMirrorCopyCut_);
-    this.codeMirror.off('cut', this.onCodeMirrorCopyCut_);
-    this.codeMirror.off('paste', this.onCodeMirrorPaste_);
-
     this.clearAnnotations_();
   };
-
-  //Code Mirror fails to format bullet points in front of lists. When this is called, it searches
-  //for 'CodeMirror-widget's, and then checks to see if any of them have a child element that is
-  //a 'firepad-list-left'. If so, it goes to the first sibling of the widget and if it has any
-  //classes, it applies those classes to the bullet. Hence, the bullet should pick up the font,
-  //size, and color of the first span of content that follows it.
-  //We debounce this using bulletTimeout as it's slightly expensive and gets triggered often
-  var bulletTimeout = null;
-
-  RichTextCodeMirror.prototype.fixBullets = function() {
-    if(bulletTimeout) {
-      return;
-    }
-    bulletTimeout = setTimeout( function() {
-      var widgets = document.getElementsByClassName('CodeMirror-widget');
-      for(var i = 0; i < widgets.length; i++) {
-        var bullet = widgets[i].getElementsByClassName('firepad-list-left')[0];
-        if(bullet) {
-          var sibling = widgets[i].nextSibling;
-          //if there's no sibling that means we don't yet have content here. In this case, we go
-          //to the previous line and see if it's also bulleted, if so, grab that bullet's style
-          if(!sibling) {
-            var prevLine = widgets[i].parentNode.parentNode.previousSibling;
-            if(prevLine) {
-              var prevLineWidget = prevLine.getElementsByClassName('CodeMirror-widget')[0];
-              if(prevLineWidget) {
-                var prevLineBullet = prevLineWidget.getElementsByClassName('firepad-list-left')[0];
-                if(prevLineBullet) {
-                  sibling = prevLineWidget.nextSibling;
-                }
-              }
-            }
-          }
-          if(sibling && sibling.classList && sibling.classList.length>0) {
-            var siblingClasses = sibling.classList;
-            bullet.className = 'firepad-list-left';
-            for(var j=0; j<siblingClasses.length; j++) {
-              bullet.classList.add(siblingClasses[j]);
-            }
-          }
-        }
-      }
-      bulletTimeout = null;
-    }, 100);
-  }
 
   RichTextCodeMirror.prototype.toggleAttribute = function(attribute, value) {
     var trueValue = value || true;
@@ -3073,8 +2959,6 @@ firepad.RichTextCodeMirror = (function () {
         attrs[attribute] = trueValue;
       }
       this.currentAttributes_ = attrs;
-      this.updateToolbarButnsState_();
-
     } else {
       var attributes = this.getCurrentAttributes_();
       var newValue = (attributes[attribute] !== trueValue) ? trueValue : false;
@@ -3092,8 +2976,6 @@ firepad.RichTextCodeMirror = (function () {
         attrs[attribute] = value;
       }
       this.currentAttributes_ = attrs;
-      this.updateToolbarButnsState_();
-
     } else {
       this.updateTextAttributes(cm.indexFromPos(cm.getCursor('start')), cm.indexFromPos(cm.getCursor('end')),
         function(attributes) {
@@ -3575,44 +3457,6 @@ firepad.RichTextCodeMirror = (function () {
     }
   };
 
-  RichTextCodeMirror.prototype.onCodeMirrorCopyCut_ = function(cm, e) {
-    var fp=this.codeMirror.firepad;
-      if (!fp.selectionHasAttributes()) return ; // not rich text
-
-      var html=fp.getHtmlFromSelection();
-      if (!html) return; // something  went wrong
-
-      if (!this.firepadStyleWrapper) {
-        var style = window.getComputedStyle(this.codeMirror.getWrapperElement());
-        this.firepadStyleWrapper=
-        'font-family:'+style.getPropertyValue('font-family')+';'+
-        'font-size:'+style.getPropertyValue('font-size')+';'+
-        'background-color:'+style.getPropertyValue('background-color')+';'+
-        'color:'+style.getPropertyValue('color')+';'+
-        'text-align:'+style.getPropertyValue('text-align')+';';
-      }
-      html='<span style="'+this.firepadStyleWrapper+'">'+html+'</span>';
-
-      var ios = /AppleWebKit/.test(navigator.userAgent) && /Mobile\/\w+/.test(navigator.userAgent);
-      if (!e.clipboardData || ios) return; // clipboard ops not supported
-
-      if (e.type == "cut") cm.replaceSelection("", null, "cut");
-
-      e.preventDefault();
-      e.clipboardData.clearData();
-      e.clipboardData.setData("text/html", html);
-    };
-
-    RichTextCodeMirror.prototype.onCodeMirrorPaste_ = function(cm, e) {
-      var html = e.clipboardData ? e.clipboardData.getData('text/html') : null;
-    if (!html) return; // not html or something went wrong, revert to CM paste
-
-    cm.replaceSelection('');
-    var fp=this.codeMirror.firepad;
-    fp.insertHtmlAtCursor(html);
-    e.preventDefault();
-  };
-
   function cmpPos (a, b) {
     return (a.line - b.line) || (a.ch - b.ch);
   }
@@ -3832,13 +3676,6 @@ firepad.RichTextCodeMirror = (function () {
   };
 
   RichTextCodeMirror.prototype.markLineSentinelCharacters_ = function(line, startIndex, endIndex, listNumber) {
-    var spans = this.annotationList_.getAnnotatedSpansForPos(line);
-    var classes;
-    if(spans.length>1) {
-      var atts = this.annotationList_.getAnnotatedSpansForPos(line)[1].annotation.attributes;
-      classes = this.getClassNameForAttributes_(atts);
-    }
-
     var cm = this.codeMirror;
     // If the mark is at the beginning of the line and it represents a list element, we need to replace it with
     // the appropriate html element for the list heading.
@@ -3858,10 +3695,10 @@ firepad.RichTextCodeMirror = (function () {
         listNumber.push(1);
       }
       if (listType === 'o') {
-        element = this.makeOrderedListElement_(listNumber[indent], classes);
+        element = this.makeOrderedListElement_(listNumber[indent]);
         listNumber[indent]++;
       } else if (listType === 'u') {
-        element = this.makeUnorderedListElement_(classes);
+        element = this.makeUnorderedListElement_();
         listNumber[indent] = 1;
       } else if (listType === 't') {
         element = this.makeTodoListElement_(false, getMarkerLine);
@@ -3878,7 +3715,6 @@ firepad.RichTextCodeMirror = (function () {
 
       // Reset deeper indents back to 1.
       listNumber = listNumber.slice(0, indent+1);
-
     }
 
     // Create a marker to cover this series of sentinel characters.
@@ -3893,17 +3729,15 @@ firepad.RichTextCodeMirror = (function () {
     marker.isForLineSentinel = true;
   };
 
-  RichTextCodeMirror.prototype.makeOrderedListElement_ = function(number, oldClasses) {
-    var classes = oldClasses ? oldClasses : this.getClassNameForAttributes_(this.currentAttributes_);
+  RichTextCodeMirror.prototype.makeOrderedListElement_ = function(number) {
     return utils.elt('div', number + '.', {
-      'class': 'firepad-list-left' + ' ' + classes
+      'class': 'firepad-list-left'
     });
   };
 
-  RichTextCodeMirror.prototype.makeUnorderedListElement_ = function(oldClasses) {
-    var classes = oldClasses ? oldClasses : this.getClassNameForAttributes_(this.currentAttributes_);
+  RichTextCodeMirror.prototype.makeUnorderedListElement_ = function() {
     return utils.elt('div', '\u2022', {
-      'class': 'firepad-list-left' + ' ' + classes
+      'class': 'firepad-list-left'
     });
   };
 
@@ -3943,14 +3777,10 @@ firepad.RichTextCodeMirror = (function () {
   };
 
   RichTextCodeMirror.prototype.onCursorActivity_ = function() {
-    var updateAttrs=!this.doNotUpdateCurrentAttributesOnNextCursorActivity;
-    this.doNotUpdateCurrentAttributesOnNextCursorActivity=false;
-    if (updateAttrs) {
-      var self = this;
-      setTimeout(function() {
-        self.updateCurrentAttributes_();
-      }, 1);
-    }
+    var self = this;
+    setTimeout(function() {
+      self.updateCurrentAttributes_();
+    }, 1);
   };
 
   RichTextCodeMirror.prototype.getCurrentAttributes_ = function() {
@@ -3963,43 +3793,34 @@ firepad.RichTextCodeMirror = (function () {
   RichTextCodeMirror.prototype.updateCurrentAttributes_ = function() {
     var cm = this.codeMirror;
     var anchor = cm.indexFromPos(cm.getCursor('anchor')), head = cm.indexFromPos(cm.getCursor('head'));
-    var pos = head, c='';
-
+    var pos = head;
     if (anchor > head) { // backwards selection
       // Advance past any newlines or line sentinels.
       while(pos < this.end()) {
-        c = this.getRange(pos, pos+1);
-        if (c !== '\n' && c !== LineSentinelCharacter) break;
+        var c = this.getRange(pos, pos+1);
+        if (c !== '\n' && c !== LineSentinelCharacter)
+          break;
         pos++;
       }
       if (pos < this.end())
         pos++; // since we're going to look at the annotation span to the left to decide what attributes to use.
     } else {
-      // look to the left, Back up before any newlines or line sentinels.
+      // Back up before any newlines or line sentinels.
       while(pos > 0) {
         c = this.getRange(pos-1, pos);
-        if (c !== '\n' && c !== LineSentinelCharacter) break;
+        if (c !== '\n' && c !== LineSentinelCharacter)
+          break;
         pos--;
       }
-      if (nextc=='\n') pos++; // we're just before a newline, advance to the newline
     }
-
-    var spans, lookLeft;
-    var nextc=this.getRange(head, head+1), eol=(nextc==='\n' || nextc===''), sol=(this.getRange(head-1, head)==LineSentinelCharacter);
-    if (anchor==head && (head===0 || (sol && !eol))) {
-      // special case for head==0 or beginning of a non empty line (and not selection), look right if possible
-      spans = this.annotationList_.getAnnotatedSpansForPos(head);
-      lookLeft=(spans.length<2);
-    } else {
-      lookLeft=true;
-      spans = this.annotationList_.getAnnotatedSpansForPos(pos);
-    }
-
+    var spans = this.annotationList_.getAnnotatedSpansForPos(pos);
     this.currentAttributes_ = {};
+
     var attributes = {};
-    if (lookLeft && spans.length > 0 && !(ATTR.LINE_SENTINEL in spans[0].annotation.attributes)) {
+    // Use the attributes to the left unless they're line attributes (in which case use the ones to the right.
+    if (spans.length > 0 && (!(ATTR.LINE_SENTINEL in spans[0].annotation.attributes))) {
       attributes = spans[0].annotation.attributes;
-    } else if (!lookLeft && spans.length > 1) {
+    } else if (spans.length > 1) {
       firepad.utils.assert(!(ATTR.LINE_SENTINEL in spans[1].annotation.attributes), "Cursor can't be between two line sentinel characters.");
       attributes = spans[1].annotation.attributes;
     }
@@ -4009,39 +3830,7 @@ firepad.RichTextCodeMirror = (function () {
         this.currentAttributes_[attr] = attributes[attr];
       }
     }
-
-    this.updateToolbarButnsState_();
   };
-
-  RichTextCodeMirror.prototype.updateToolbarButnsState_ = function() {
-    if (!this.codeMirror || !this.codeMirror.firepad || !this.codeMirror.firepad.toolbar) return;
-    var toolbar=this.codeMirror.firepad.toolbar;
-    var attr=this.currentAttributes_;
-
-    if (!toolbar.boldBtnElem) { // cache button elements
-      toolbar.boldBtnElem = toolbar.element_.getElementsByClassName('firepad-tb-bold')[0].parentElement;
-      toolbar.italicBtnElem = toolbar.element_.getElementsByClassName('firepad-tb-italic')[0].parentElement;
-      toolbar.underlineBtnElem = toolbar.element_.getElementsByClassName('firepad-tb-underline')[0].parentElement;
-      toolbar.strikeBtnElem = toolbar.element_.getElementsByClassName('firepad-tb-strikethrough')[0].parentElement;
-    }
-
-    if (toolbar.updateToolbarButnsStateTimeout) clearTimeout(toolbar.updateToolbarButnsStateTimeout);
-    toolbar.updateToolbarButnsStateTimeout = setTimeout(function() {
-      toggleClass(toolbar.boldBtnElem, 'firepad-btn-highlight', attr.b === true);
-      toggleClass(toolbar.italicBtnElem, 'firepad-btn-highlight', attr.i === true);
-      toggleClass(toolbar.underlineBtnElem, 'firepad-btn-highlight', attr.u === true);
-      toggleClass(toolbar.strikeBtnElem, 'firepad-btn-highlight', attr.s === true);
-    }, 100);
-  };
-
-  // If newState is provided add/remove theClass accordingly, otherwise toggle theClass
-  function toggleClass(elem, theClass, newState) {
-    var matchRegExp = new RegExp('(?:^|\\s)' + theClass + '(?!\\S)', 'g');
-    var add = (arguments.length > 2 ? newState : (elem.className.match(matchRegExp) === null));
-
-    elem.className = elem.className.replace(matchRegExp, ''); // clear all
-    if (add) elem.className += ' ' + theClass;
-  }
 
   RichTextCodeMirror.prototype.getCurrentLineAttributes_ = function() {
     var cm = this.codeMirror;
@@ -4114,8 +3903,6 @@ firepad.RichTextCodeMirror = (function () {
     var listType = lineAttributes[ATTR.LIST_TYPE];
     var indent = lineAttributes[ATTR.LINE_INDENT];
 
-    var value = cm.getDoc().getValue();
-
     var backspaceAtStartOfLine = this.emptySelection_() && cursorPos.ch === 1;
 
     if (backspaceAtStartOfLine && listType) {
@@ -4124,19 +3911,9 @@ firepad.RichTextCodeMirror = (function () {
         delete attributes[ATTR.LIST_TYPE];
         delete attributes[ATTR.LINE_INDENT];
       });
-    } else if (value.length===0 || (value.length===1 && value.charCodeAt(0)===57344)) {
-      // if the document is empty just return; If the document is of length 1, and that one character is char code
-      // 57344, then it is actually empty. (This odd character really shouldn't be there, it's a placeholder
-      // inserted by CodeMirror, but it shouldn't show up in the doc.)
-      return;
     } else if (backspaceAtStartOfLine && indent && indent > 0) {
       this.unindent();
     } else {
-      var charLeft=cm.getRange({line: cursorPos.line, ch: cursorPos.ch-1}, cursorPos);
-      //if (charLeft==='') return; // nothing to delete
-      this.updateCurrentAttributes_(); // refresh attribute from any previous deleteLeft
-      // disable updateCurrentAttributes in the onNextCursorActivity triggered by deleteH
-      this.doNotUpdateCurrentAttributesOnNextCursorActivity=true;
       cm.deleteH(-1, "char");
     }
   };
@@ -4247,7 +4024,7 @@ firepad.RichTextCodeMirror = (function () {
   function bind (obj, method) {
     var fn = obj[method];
     obj[method] = function () {
-      return fn.apply(obj, arguments);
+      fn.apply(obj, arguments);
     };
   }
 
@@ -4375,6 +4152,44 @@ firepad.RichTextCodeMirrorAdapter = (function () {
     return [operation, inverse];
   };
 
+  // Apply an operation to a CodeMirror instance.
+  RichTextCodeMirrorAdapter.applyOperationToCodeMirror = function (operation, rtcm) {
+
+    // HACK: If there are a lot of operations; hide CodeMirror so that it doesn't re-render constantly.
+    if (operation.ops.length > 10)
+      rtcm.codeMirror.getWrapperElement().setAttribute('style', 'display: none');
+
+    var ops = operation.ops;
+    var index = 0; // holds the current index into CodeMirror's content
+    for (var i = 0, l = ops.length; i < l; i++) {
+      var op = ops[i];
+      if (op.isRetain()) {
+        if (!emptyAttributes(op.attributes)) {
+          rtcm.updateTextAttributes(index, index + op.chars, function(attributes) {
+            for(var attr in op.attributes) {
+              if (op.attributes[attr] === false) {
+                delete attributes[attr];
+              } else {
+                attributes[attr] = op.attributes[attr];
+              }
+            }
+          }, 'RTCMADAPTER', /*doLineAttributes=*/true);
+        }
+        index += op.chars;
+      } else if (op.isInsert()) {
+        rtcm.insertText(index, op.text, op.attributes, 'RTCMADAPTER');
+        index += op.text.length;
+      } else if (op.isDelete()) {
+        rtcm.removeText(index, index + op.chars, 'RTCMADAPTER');
+      }
+    }
+
+    if (operation.ops.length > 10) {
+      rtcm.codeMirror.getWrapperElement().setAttribute('style', '');
+      rtcm.codeMirror.refresh();
+    }
+  };
+
   RichTextCodeMirrorAdapter.prototype.registerCallbacks = function (cb) {
     this.callbacks = cb;
   };
@@ -4455,7 +4270,7 @@ firepad.RichTextCodeMirrorAdapter = (function () {
     return this.addedStyleSheet.insertRule(css, 0);
   };
 
-  RichTextCodeMirrorAdapter.prototype.setOtherCursor = function (cursor, color, clientId, displayName) {
+  RichTextCodeMirrorAdapter.prototype.setOtherCursor = function (cursor, color, clientId) {
     var cursorPos = this.cm.posFromIndex(cursor.position);
     if (typeof color !== 'string' || !color.match(/^#[a-fA-F0-9]{3,6}$/)) {
       return;
@@ -4471,9 +4286,8 @@ firepad.RichTextCodeMirrorAdapter = (function () {
     if (cursor.position === cursor.selectionEnd) {
       // show cursor
       var cursorCoords = this.cm.cursorCoords(cursorPos);
-      var cursorEl = document.createElement('div');
+      var cursorEl = document.createElement('span');
       cursorEl.className = 'other-client';
-      cursorEl.style.display = 'inline';
       cursorEl.style.borderLeftWidth = '2px';
       cursorEl.style.borderLeftStyle = 'solid';
       cursorEl.style.borderLeftColor = color;
@@ -4481,12 +4295,6 @@ firepad.RichTextCodeMirrorAdapter = (function () {
       cursorEl.style.height = (cursorCoords.bottom - cursorCoords.top) * 0.9 + 'px';
       cursorEl.setAttribute('data-clientid', clientId);
       cursorEl.style.zIndex = 0;
-
-      var cursorLabel = document.createElement('span');
-      cursorLabel.innerHTML = displayName;
-      cursorLabel.className = 'firepad-cursor-label';
-      cursorLabel.style.color = color;
-      cursorEl.appendChild(cursorLabel);
 
       return this.cm.setBookmark(cursorPos, { widget: cursorEl, insertLeft: true });
     } else {
@@ -4521,41 +4329,8 @@ firepad.RichTextCodeMirrorAdapter = (function () {
     if (action) { action.apply(this, args); }
   };
 
-  // Apply an operation to a CodeMirror instance.
   RichTextCodeMirrorAdapter.prototype.applyOperation = function (operation) {
-    // HACK: If there are a lot of operations; hide CodeMirror so that it doesn't re-render constantly.
-    if (operation.ops.length > 10)
-      this.rtcm.codeMirror.getWrapperElement().setAttribute('style', 'display: none');
-
-    var ops = operation.ops;
-    var index = 0; // holds the current index into CodeMirror's content
-    for (var i = 0, l = ops.length; i < l; i++) {
-      var op = ops[i];
-      if (op.isRetain()) {
-        if (!emptyAttributes(op.attributes)) {
-          this.rtcm.updateTextAttributes(index, index + op.chars, function(attributes) {
-            for(var attr in op.attributes) {
-              if (op.attributes[attr] === false) {
-                delete attributes[attr];
-              } else {
-                attributes[attr] = op.attributes[attr];
-              }
-            }
-          }, 'RTCMADAPTER', /*doLineAttributes=*/true);
-        }
-        index += op.chars;
-      } else if (op.isInsert()) {
-        this.rtcm.insertText(index, op.text, op.attributes, 'RTCMADAPTER');
-        index += op.text.length;
-      } else if (op.isDelete()) {
-        this.rtcm.removeText(index, index + op.chars, 'RTCMADAPTER');
-      }
-    }
-
-    if (operation.ops.length > 10) {
-      this.rtcm.codeMirror.getWrapperElement().setAttribute('style', '');
-      this.rtcm.codeMirror.refresh();
-    }
+    RichTextCodeMirrorAdapter.applyOperationToCodeMirror(operation, this.rtcm);
   };
 
   RichTextCodeMirrorAdapter.prototype.registerUndo = function (undoFn) {
@@ -4912,14 +4687,14 @@ firepad.ParseHtml = (function () {
   }
 
   ParseOutput.prototype.newlineIfNonEmpty = function(state) {
-    this.cleanLine_(true);
+    this.cleanLine_();
     if (this.currentLine.length > 0) {
       this.newline(state);
     }
   };
 
   ParseOutput.prototype.newlineIfNonEmptyOrListItem = function(state) {
-    this.cleanLine_(true);
+    this.cleanLine_();
     if (this.currentLine.length > 0 || this.currentLineListItemType !== null) {
       this.newline(state);
     }
@@ -4941,17 +4716,15 @@ firepad.ParseHtml = (function () {
     this.currentLineListItemType = type;
   };
 
-  ParseOutput.prototype.cleanLine_ = function(ignoreNbsps) {
+  ParseOutput.prototype.cleanLine_ = function() {
     // Kinda' a hack, but we remove leading and trailing spaces (since these aren't significant in html) and
     // replaces nbsp's with normal spaces.
     if (this.currentLine.length > 0) {
       var last = this.currentLine.length - 1;
       this.currentLine[0].text = this.currentLine[0].text.replace(/^ +/, '');
       this.currentLine[last].text = this.currentLine[last].text.replace(/ +$/g, '');
-      if (!ignoreNbsps) {
-        for(var i = 0; i < this.currentLine.length; i++) {
-          this.currentLine[i].text = this.currentLine[i].text.replace(/\u00a0/g, ' ');
-        }
+      for(var i = 0; i < this.currentLine.length; i++) {
+        this.currentLine[i].text = this.currentLine[i].text.replace(/\u00a0/g, ' ');
       }
     }
     // If after stripping trailing whitespace, there's nothing left, clear currentLine out.
@@ -4960,18 +4733,14 @@ firepad.ParseHtml = (function () {
     }
   };
 
-  var entityManager_, codeMirror_;
-  function parseHtml(html, entityManager, codeMirror) {
-    html=html.replace(/(\r\n|\n|\r)?<html>(\r\n|\n|\r)?<body>(\r\n|\n|\r)?/, ''); // remove <html><body>
-    html=html.replace(/(\r\n|\n|\r)?<\/body>(\r\n|\n|\r)?<\/html>(\r\n|\n|\r)?/, ''); // remove </body></html>
-    
+  var entityManager_;
+  function parseHtml(html, entityManager) {
     // Create DIV with HTML (as a convenient way to parse it).
     var div = (firepad.document || document).createElement('div');
     div.innerHTML = html;
 
     // HACK until I refactor this.
     entityManager_ = entityManager;
-    codeMirror_ = codeMirror;
 
     var output = new ParseOutput();
     var state = new ParseState();
@@ -5001,8 +4770,8 @@ firepad.ParseHtml = (function () {
 
     switch (node.nodeType) {
       case Node.TEXT_NODE:
-        // replace spaces with &nbsp; so they can withstand cleanLine_
-        var text = node.nodeValue.replace(/ /g, '\u00a0');
+        // This probably isn't exactly right, but mostly works...
+        var text = node.nodeValue.replace(/[ \n\t]+/g, ' ');
         output.currentLine.push(firepad.Text(text, state.textFormatting));
         break;
       case Node.ELEMENT_NODE:
@@ -5103,29 +4872,7 @@ firepad.ParseHtml = (function () {
     }
   }
 
-  function styleEqual(s1,s2) {
-    s1=s1.toLowerCase(); // lower
-    s1=s1.split(' ').join(''); // remove spaces
-    s1=s1.lastIndexOf(";") == s1.length - 1 ?  s1.substring(0,  s1.length -1 ) : s1; // remove trailing ;
-    s2=s2.toLowerCase(); // lower
-    s2=s2.split(' ').join(''); // remove spaces
-    s2=s2.lastIndexOf(";") == s2.length - 1 ?  s2.substring(0,  s2.length -1 ) : s2; // remove trailing ;
-    return s1==s2;
-  }
-
   function parseStyle(state, styleString) {
-    if (!this.firepadDefaultStyles) {
-      // caching some default styles needed later
-      var style = window.getComputedStyle(codeMirror_.getWrapperElement());
-      firepadDefaultStyles={
-        fontFamily: style.getPropertyValue('font-family'),
-        fontSize: style.getPropertyValue('font-size'),
-        backgroundColor: style.getPropertyValue('background-color'),
-        color: style.getPropertyValue('color'),
-        textAlign: style.getPropertyValue('text-align')
-      };
-    }
-
     var textFormatting = state.textFormatting;
     var lineFormatting = state.lineFormatting;
     var styles = styleString.split(';');
@@ -5150,19 +4897,15 @@ firepad.ParseHtml = (function () {
           textFormatting = textFormatting.italic(italic);
           break;
         case 'color':
-          if (styleEqual(val, this.firepadDefaultStyles.color)) break;
           textFormatting = textFormatting.color(val);
           break;
         case 'background-color':
-          if (styleEqual(val, this.firepadDefaultStyles.backgroundColor)) break;
           textFormatting = textFormatting.backgroundColor(val);
           break;
         case 'text-align':
-          if (styleEqual(val, this.firepadDefaultStyles.textAlign)) break;
           lineFormatting = lineFormatting.align(val);
           break;
         case 'font-size':
-          if (styleEqual(val, this.firepadDefaultStyles.fontSize)) break;
           var size = null;
           var allowedValues = ['px','pt','%','em','xx-small','x-small','small','medium','large','x-large','xx-large','smaller','larger'];
           if (firepad.utils.stringEndsWith(val, allowedValues)) {
@@ -5176,7 +4919,6 @@ firepad.ParseHtml = (function () {
           }
           break;
         case 'font-family':
-          if (styleEqual(val, this.firepadDefaultStyles.fontFamily)) break;
           var font = firepad.utils.trim(val.split(',')[0]); // get first font.
           font = font.replace(/['"]/g, ''); // remove quotes.
           font = font.replace(/\w\S*/g, function(txt){return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase() });
@@ -5445,6 +5187,7 @@ var firepad = firepad || { };
  * Instance of headless Firepad for use in NodeJS. Supports get/set on text/html.
  */
 firepad.Headless = (function() {
+
   var TextOperation   = firepad.TextOperation;
   var FirebaseAdapter = firepad.FirebaseAdapter;
   var EntityManager   = firepad.EntityManager;
@@ -5454,18 +5197,15 @@ firepad.Headless = (function() {
     // Allow calling without new.
     if (!(this instanceof Headless)) { return new Headless(refOrPath); }
 
-    var firebase, ref;
     if (typeof refOrPath === 'string') {
-      if (window.firebase === undefined && typeof firebase !== 'object') {
-            console.log("REQUIRING");
-        firebase = require('firebase');
+      if (typeof Firebase !== 'function') {
+        var firebase = require('firebase');
       } else {
-        firebase = window.firebase;
+        var firebase = Firebase;
       }
-
-      ref = firebase.database().refFromURL(refOrPath);
+      var ref = new firebase(refOrPath);
     } else {
-      ref = refOrPath;
+      var ref = refOrPath;
     }
 
     this.entityManager_  = new EntityManager();
@@ -5553,7 +5293,7 @@ firepad.Headless = (function() {
     }
 
     self.initializeFakeDom(function() {
-      var textPieces = ParseHtml(html, self.entityManager_, self.codeMirror_);
+      var textPieces = ParseHtml(html, self.entityManager_);
       var inserts    = firepad.textPiecesToInserts(true, textPieces);
       var op         = new TextOperation();
 
@@ -5607,6 +5347,8 @@ firepad.Firepad = (function(global) {
   var ATTR = firepad.AttributeConstants;
   var utils = firepad.utils;
   var LIST_TYPE = firepad.LineFormatting.LIST_TYPE;
+  var CodeMirror = global.CodeMirror;
+  var ace = global.ace;
 
   function Firepad(ref, place, options) {
     if (!(this instanceof Firepad)) { return new Firepad(ref, place, options); }
@@ -5655,24 +5397,24 @@ firepad.Firepad = (function(global) {
     }
 
     this.imageInsertionUI = this.getOption('imageInsertionUI', true);
-    this.showPrint = this.getOption('showPrint', true);
 
     if (this.getOption('richTextToolbar', false)) {
       this.addToolbar_();
       this.firepadWrapper_.className += ' firepad-richtext firepad-with-toolbar';
     }
 
+    this.addPoweredByLogo_();
+
     // Now that we've mucked with CodeMirror, refresh it.
     if (this.codeMirror_)
       this.codeMirror_.refresh();
 
-    var userDisplayName = this.getOption('userDisplayName', userId);
-    var userId = this.getOption('userId', ref.push().key);
+    var userId = this.getOption('userId', ref.push().key());
     var userColor = this.getOption('userColor', colorFromUserId(userId));
 
     this.entityManager_ = new EntityManager();
 
-    this.firebaseAdapter_ = new FirebaseAdapter(ref, userId, userColor, userDisplayName);
+    this.firebaseAdapter_ = new FirebaseAdapter(ref, userId, userColor);
     if (this.codeMirror_) {
       this.richTextCodeMirror_ = new RichTextCodeMirror(this.codeMirror_, this.entityManager_, { cssPrefix: 'firepad-' });
       this.editorAdapter_ = new RichTextCodeMirrorAdapter(this.richTextCodeMirror_);
@@ -5758,10 +5500,6 @@ firepad.Firepad = (function(global) {
     this.firebaseAdapter_.setColor(color);
   };
 
-  Firepad.prototype.setUserDisplayName = function(displayName) {
-    this.firebaseAdapter_.setDisplayName(displayName);
-  };
-
   Firepad.prototype.getText = function() {
     this.assertReady_('getText');
     if (this.codeMirror_)
@@ -5830,32 +5568,6 @@ firepad.Firepad = (function(global) {
     return this.getHtmlFromRange(null, null);
   };
 
-  Firepad.prototype.selectionHasAttributes = function() {
-    var startPos = this.codeMirror_.getCursor('start'), endPos = this.codeMirror_.getCursor('end');
-    var startIndex = this.codeMirror_.indexFromPos(startPos), endIndex = this.codeMirror_.indexFromPos(endPos);
-    return this.rangeHasAttributes(startIndex, endIndex);
-  };
-
-  Firepad.prototype.rangeHasAttributes = function(start, end) {
-    this.assertReady_('rangeHasAttributes');
-    var doc = (start != null && end != null) ?
-      this.getOperationForSpan(start, end) :
-      this.getOperationForSpan(0, this.codeMirror_.getValue().length);
-
-    var op;
-    for (var i = 0; i < doc.ops.length; i++) {
-      op = doc.ops[i];
-      for (var prop in op.attributes) {
-        if (!op.attributes.hasOwnProperty(prop)) continue;
-        if (prop==ATTR.LINE_SENTINEL) continue;
-        for(var validAttr in firepad.AttributeConstants) if (firepad.AttributeConstants[validAttr] === prop) return true; // found one
-      }
-    }
-
-    return false;
-  };
-
-
   Firepad.prototype.getHtmlFromSelection = function() {
     var startPos = this.codeMirror_.getCursor('start'), endPos = this.codeMirror_.getCursor('end');
     var startIndex = this.codeMirror_.indexFromPos(startPos), endIndex = this.codeMirror_.indexFromPos(endPos);
@@ -5871,7 +5583,7 @@ firepad.Firepad = (function(global) {
   };
 
   Firepad.prototype.insertHtml = function (index, html) {
-    var lines = firepad.ParseHtml(html, this.entityManager_, this.codeMirror_);
+    var lines = firepad.ParseHtml(html, this.entityManager_);
     this.insertText(index, lines);
   };
 
@@ -5880,7 +5592,7 @@ firepad.Firepad = (function(global) {
   };
 
   Firepad.prototype.setHtml = function (html) {
-    var lines = firepad.ParseHtml(html, this.entityManager_, this.codeMirror_);
+    var lines = firepad.ParseHtml(html, this.entityManager_);
     this.setText(lines);
   };
 
@@ -5982,30 +5694,6 @@ firepad.Firepad = (function(global) {
     this.codeMirror_.redo();
   };
 
-  function showPrintPopup(data) {
-      var d = new Date();
-      var title = 'Team Write - ' + d.toLocaleString();
-      var mywindow = window.open('', title, 'height=1000,width=800');
-
-      mywindow.document.head.innerHTML = '<title>' + title + '</title>';
-      mywindow.document.body.innerHTML = '<body>' + data + '</body>';
-
-      mywindow.document.close(); // necessary for IE >= 10
-      mywindow.focus(); // necessary for IE >= 10
-
-      mywindow.print();
-      mywindow.close();
-
-      return true;
-  }
-
-
-  Firepad.prototype.print = function() {
-    var wrapper = '<div style="font-family: Verdana, sans-serif; font-size: 14px">';
-    var html = wrapper + this.getHtml() + '</div>';
-    showPrintPopup(html);
-  };
-
   Firepad.prototype.insertEntity = function(type, info, origin) {
     this.richTextCodeMirror_.insertEntityAtCursor(type, info, origin);
   };
@@ -6032,73 +5720,45 @@ firepad.Firepad = (function(global) {
   };
 
   Firepad.prototype.makeImageDialog_ = function() {
-    var self = this;
-    var inputID = 'inputID' + (new Date()).getTime();
+    this.makeDialog_('img', 'Insert image url');
+  };
 
-    var hideDialog = function() {
+  Firepad.prototype.makeDialog_ = function(id, placeholder) {
+   var self = this;
+
+   var hideDialog = function() {
      var dialog = document.getElementById('overlay');
      dialog.style.visibility = "hidden";
      self.firepadWrapper_.removeChild(dialog);
-    };
+   };
 
-    var addImgElement = function() {
-     var src = document.getElementById(inputID).value;
-     if (src !== null && src.length>0) {
-       var dialog = document.getElementById('overlay');
-       dialog.style.visibility = "hidden";
-       self.insertEntity('img', { 'src': src });
-       self.firepadWrapper_.removeChild(dialog);
-     }
-    };
+   var cb = function() {
+     var dialog = document.getElementById('overlay');
+     dialog.style.visibility = "hidden";
+     var src = document.getElementById(id).value;
+     if (src !== null)
+       self.insertEntity(id, { 'src': src });
+     self.firepadWrapper_.removeChild(dialog);
+   };
 
-    function testImage(src) {
-        var src = document.getElementById(inputID).value;
+   var input = utils.elt('input', null, { 'class':'firepad-dialog-input', 'id':id, 'type':'text', 'placeholder':placeholder, 'autofocus':'autofocus' });
 
-        var image = new Image();
-        image.onerror = function imageError(error) {
-            document.getElementById('feedback').innerHTML = 'Sorry, image could not be found.';
-        };
-        image.onload = function imageLoaded() {
-            addImgElement();
-        };
-        image.src = src;
-    }
+   var submit = utils.elt('a', 'Submit', { 'class': 'firepad-btn', 'id':'submitbtn' });
+   utils.on(submit, 'click', utils.stopEventAnd(cb));
 
-    var inputChanged = function() {
-     var src = document.getElementById(inputID).value;
-     document.getElementById('feedback').innerHTML = '';
-     var submitBtn = document.getElementById('submitbtn');
-     if (src !== null && src.length>0) {
-       submitBtn.setAttribute( 'class', 'firepad-btn' );
-     } else {
-       submitBtn.setAttribute( 'class', 'firepad-btn firepad-btn-disabled' );
-     }
-    }
+   var cancel = utils.elt('a', 'Cancel', { 'class': 'firepad-btn' });
+   utils.on(cancel, 'click', utils.stopEventAnd(hideDialog));
 
-    var header = utils.elt('div', 'Insert image URL', { 'class': 'firepad-dialog-header'});
+   var buttonsdiv = utils.elt('div', [submit, cancel], { 'class':'firepad-btn-group' });
 
-    var input = utils.elt('input', null, { 'class':'firepad-dialog-input', 'id':inputID, 'type':'text',
-      'placeholder':'', 'autofocus':'autofocus' });
-    utils.on(input, 'keyup', utils.stopEventAnd(inputChanged));
+   var div = utils.elt('div', [input, buttonsdiv], { 'class':'firepad-dialog-div' });
+   var dialog = utils.elt('div', [div], { 'class': 'firepad-dialog', id:'overlay' });
 
-    var submit = utils.elt('a', 'Submit', { 'class': 'firepad-btn firepad-btn-disabled', 'id':'submitbtn' });
-    utils.on(submit, 'click', utils.stopEventAnd(testImage));
-
-    var cancel = utils.elt('a', 'Cancel', { 'class': 'firepad-btn' });
-    utils.on(cancel, 'click', utils.stopEventAnd(hideDialog));
-
-    var feedback = utils.elt('div', '', { 'class': 'firepad-feedback', id:'feedback' });
-
-    var buttonsdiv = utils.elt('div', [submit, cancel], { 'class':'firepad-btn-group' });
-
-    var div = utils.elt('div', [header, input, feedback, buttonsdiv], { 'class':'firepad-dialog-div' });
-    var dialog = utils.elt('div', [div], { 'class': 'firepad-dialog', id:'overlay' });
-
-    this.firepadWrapper_.appendChild(dialog);
+   this.firepadWrapper_.appendChild(dialog);
   };
 
   Firepad.prototype.addToolbar_ = function() {
-    this.toolbar = new RichTextToolbar(this.imageInsertionUI, this.showPrint);
+    this.toolbar = new RichTextToolbar(this.imageInsertionUI);
 
     this.toolbar.on('undo', this.undo, this);
     this.toolbar.on('redo', this.redo, this);
@@ -6118,11 +5778,15 @@ firepad.Firepad = (function(global) {
     this.toolbar.on('indent-increase', this.indent, this);
     this.toolbar.on('indent-decrease', this.unindent, this);
     this.toolbar.on('insert-image', this.makeImageDialog_, this);
-    if(this.showPrint) {
-      this.toolbar.on('print', this.print, this);
-    }
 
     this.firepadWrapper_.insertBefore(this.toolbar.element(), this.firepadWrapper_.firstChild);
+  };
+
+  Firepad.prototype.addPoweredByLogo_ = function() {
+    var poweredBy = utils.elt('a', null, { 'class': 'powered-by-firepad'} );
+    poweredBy.setAttribute('href', 'http://www.firepad.io/');
+    poweredBy.setAttribute('target', '_blank');
+    this.firepadWrapper_.appendChild(poweredBy)
   };
 
   Firepad.prototype.initializeKeyMap_ = function() {
