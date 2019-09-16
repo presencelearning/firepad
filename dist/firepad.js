@@ -1844,7 +1844,7 @@ firepad.RichTextToolbar = (function(global) {
       content.setAttribute('style', 'background-color:' + colors[i]);
       items.push({ content: content, value: colors[i] });
     }
-    return this.makeDropdown_('Color', 'color', items);
+    return this.makeDropdown_('ColorABC', 'color', items);
   };
 
   RichTextToolbar.prototype.makeDropdown_ = function(title, eventName, items, value_suffix) {
