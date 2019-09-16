@@ -1783,7 +1783,7 @@ firepad.RichTextToolbar = (function(global) {
       content.setAttribute('style', 'font-family:' + fonts[i]);
       items.push({ content: content, value: fonts[i] });
     }
-    return this.makeDropdown_('FontXYZ', 'font', items);
+    return this.makeDropdown_('Font', 'font', items);
   };
 
   RichTextToolbar.prototype.makeFontSizeDropdown_ = function() {
@@ -1809,7 +1809,7 @@ firepad.RichTextToolbar = (function(global) {
       content.setAttribute('style', 'background-color:' + colors[i]);
       items.push({ content: content, value: colors[i] });
     }
-    return this.makeDropdown_('ColorXYZ', 'color', items);
+    return this.makeDropdown_('Color', 'color', items);
   };
 
   RichTextToolbar.prototype.makeDropdown_ = function(title, eventName, items, value_suffix) {
