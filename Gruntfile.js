@@ -68,6 +68,7 @@ module.exports = function (grunt) {
           "lib/client.js",
           "lib/editor-client.js",
           "lib/ace-adapter.js",
+          "lib/monaco-adapter.js",
           "lib/constants.js",
           "lib/entity-manager.js",
           "lib/entity.js",
@@ -129,7 +130,7 @@ module.exports = function (grunt) {
   grunt.loadNpmTasks('grunt-coffeelint');
   grunt.loadNpmTasks('grunt-contrib-coffee');
   grunt.loadNpmTasks('grunt-contrib-concat');
-  grunt.loadNpmTasks('grunt-contrib-uglify');
+  grunt.loadNpmTasks('grunt-contrib-uglify-es');
   grunt.loadNpmTasks('grunt-contrib-copy');
   grunt.loadNpmTasks('grunt-contrib-watch');
   grunt.loadNpmTasks('grunt-karma');
