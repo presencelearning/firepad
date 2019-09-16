@@ -2479,286 +2479,805 @@ firepad.EditorClient = (function () {
 
 firepad.utils.makeEventEmitter(firepad.EditorClient, ['synced']);
 
-var firepad,
-  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
-  __slice = [].slice;
+var firepad;
 
 if (typeof firepad === "undefined" || firepad === null) {
   firepad = {};
 }
 
 firepad.ACEAdapter = (function() {
-  ACEAdapter.prototype.ignoreChanges = false;
-
-  function ACEAdapter(aceInstance) {
-    this.onCursorActivity = __bind(this.onCursorActivity, this);
-    this.onFocus = __bind(this.onFocus, this);
-    this.onBlur = __bind(this.onBlur, this);
-    this.onChange = __bind(this.onChange, this);
-    var _ref;
-    this.ace = aceInstance;
-    this.aceSession = this.ace.getSession();
-    this.aceDoc = this.aceSession.getDocument();
-    this.aceDoc.setNewLineMode('unix');
-    this.grabDocumentState();
-    this.ace.on('change', this.onChange);
-    this.ace.on('blur', this.onBlur);
-    this.ace.on('focus', this.onFocus);
-    this.aceSession.selection.on('changeCursor', this.onCursorActivity);
-    if (this.aceRange == null) {
-      this.aceRange = ((_ref = ace.require) != null ? _ref : require)("ace/range").Range;
+  class ACEAdapter {
+    constructor(aceInstance) {
+      var ref;
+      this.onChange = this.onChange.bind(this);
+      this.onBlur = this.onBlur.bind(this);
+      this.onFocus = this.onFocus.bind(this);
+      this.onCursorActivity = this.onCursorActivity.bind(this);
+      this.ace = aceInstance;
+      this.aceSession = this.ace.getSession();
+      this.aceDoc = this.aceSession.getDocument();
+      this.aceDoc.setNewLineMode('unix');
+      this.grabDocumentState();
+      this.ace.on('change', this.onChange);
+      this.ace.on('blur', this.onBlur);
+      this.ace.on('focus', this.onFocus);
+      this.aceSession.selection.on('changeCursor', this.onCursorActivity);
+      if (this.aceRange == null) {
+        this.aceRange = ((ref = ace.require) != null ? ref : require)("ace/range").Range;
+      }
     }
-  }
 
-  ACEAdapter.prototype.grabDocumentState = function() {
-    this.lastDocLines = this.aceDoc.getAllLines();
-    return this.lastCursorRange = this.aceSession.selection.getRange();
-  };
+    grabDocumentState() {
+      this.lastDocLines = this.aceDoc.getAllLines();
+      return this.lastCursorRange = this.aceSession.selection.getRange();
+    }
 
-  ACEAdapter.prototype.detach = function() {
-    this.ace.removeListener('change', this.onChange);
-    this.ace.removeListener('blur', this.onBlur);
-    this.ace.removeListener('focus', this.onCursorActivity);
-    return this.aceSession.selection.removeListener('changeCursor', this.onCursorActivity);
-  };
+    // Removes all event listeners from the ACE editor instance
+    detach() {
+      this.ace.removeListener('change', this.onChange);
+      this.ace.removeListener('blur', this.onBlur);
+      this.ace.removeListener('focus', this.onFocus);
+      return this.aceSession.selection.removeListener('changeCursor', this.onCursorActivity);
+    }
 
-  ACEAdapter.prototype.onChange = function(change) {
-    var pair;
-    if (!this.ignoreChanges) {
-      pair = this.operationFromACEChange(change);
-      this.trigger.apply(this, ['change'].concat(__slice.call(pair)));
+    onChange(change) {
+      var pair;
+      if (!this.ignoreChanges) {
+        pair = this.operationFromACEChange(change);
+        this.trigger('change', ...pair);
+        return this.grabDocumentState();
+      }
+    }
+
+    onBlur() {
+      if (this.ace.selection.isEmpty()) {
+        return this.trigger('blur');
+      }
+    }
+
+    onFocus() {
+      return this.trigger('focus');
+    }
+
+    onCursorActivity() {
+      return setTimeout(() => {
+        return this.trigger('cursorActivity');
+      }, 0);
+    }
+
+    // Converts an ACE change object into a TextOperation and its inverse
+    // and returns them as a two-element array.
+    operationFromACEChange(change) {
+      var action, delete_op, delta, insert_op, ref, restLength, start, text;
+      if (change.data) {
+        // Ace < 1.2.0
+        delta = change.data;
+        if ((ref = delta.action) === 'insertLines' || ref === 'removeLines') {
+          text = delta.lines.join('\n') + '\n';
+          action = delta.action.replace('Lines', '');
+        } else {
+          text = delta.text.replace(this.aceDoc.getNewLineCharacter(), '\n');
+          action = delta.action.replace('Text', '');
+        }
+        start = this.indexFromPos(delta.range.start);
+      } else {
+        // Ace 1.2.0+
+        text = change.lines.join('\n');
+        start = this.indexFromPos(change.start);
+      }
+      restLength = this.lastDocLines.join('\n').length - start;
+      if (change.action === 'remove') {
+        restLength -= text.length;
+      }
+      insert_op = new firepad.TextOperation().retain(start).insert(text).retain(restLength);
+      delete_op = new firepad.TextOperation().retain(start).delete(text).retain(restLength);
+      if (change.action === 'remove') {
+        return [delete_op, insert_op];
+      } else {
+        return [insert_op, delete_op];
+      }
+    }
+
+    // Apply an operation to an ACE instance.
+    applyOperationToACE(operation) {
+      var from, index, j, len, op, range, ref, to;
+      index = 0;
+      ref = operation.ops;
+      for (j = 0, len = ref.length; j < len; j++) {
+        op = ref[j];
+        if (op.isRetain()) {
+          index += op.chars;
+        } else if (op.isInsert()) {
+          this.aceDoc.insert(this.posFromIndex(index), op.text);
+          index += op.text.length;
+        } else if (op.isDelete()) {
+          from = this.posFromIndex(index);
+          to = this.posFromIndex(index + op.chars);
+          range = this.aceRange.fromPoints(from, to);
+          this.aceDoc.remove(range);
+        }
+      }
       return this.grabDocumentState();
     }
-  };
 
-  ACEAdapter.prototype.onBlur = function() {
-    if (this.ace.selection.isEmpty()) {
-      return this.trigger('blur');
-    }
-  };
-
-  ACEAdapter.prototype.onFocus = function() {
-    return this.trigger('focus');
-  };
-
-  ACEAdapter.prototype.onCursorActivity = function() {
-    var _this = this;
-    return setTimeout(function() {
-      return _this.trigger('cursorActivity');
-    }, 0);
-  };
-
-  ACEAdapter.prototype.operationFromACEChange = function(change) {
-    var action, delete_op, delta, insert_op, restLength, start, text, _ref;
-    if (change.data) {
-      delta = change.data;
-      if ((_ref = delta.action) === 'insertLines' || _ref === 'removeLines') {
-        text = delta.lines.join('\n') + '\n';
-        action = delta.action.replace('Lines', '');
-      } else {
-        text = delta.text.replace(this.aceDoc.getNewLineCharacter(), '\n');
-        action = delta.action.replace('Text', '');
+    posFromIndex(index) {
+      var j, len, line, ref, row;
+      ref = this.aceDoc.$lines;
+      for (row = j = 0, len = ref.length; j < len; row = ++j) {
+        line = ref[row];
+        if (index <= line.length) {
+          break;
+        }
+        index -= line.length + 1;
       }
-      start = this.indexFromPos(delta.range.start);
-    } else {
-      text = change.lines.join('\n');
-      start = this.indexFromPos(change.start);
-    }
-    restLength = this.lastDocLines.join('\n').length - start;
-    if (change.action === 'remove') {
-      restLength -= text.length;
-    }
-    insert_op = new firepad.TextOperation().retain(start).insert(text).retain(restLength);
-    delete_op = new firepad.TextOperation().retain(start)["delete"](text).retain(restLength);
-    if (change.action === 'remove') {
-      return [delete_op, insert_op];
-    } else {
-      return [insert_op, delete_op];
-    }
-  };
-
-  ACEAdapter.prototype.applyOperationToACE = function(operation) {
-    var from, index, op, range, to, _i, _len, _ref;
-    index = 0;
-    _ref = operation.ops;
-    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-      op = _ref[_i];
-      if (op.isRetain()) {
-        index += op.chars;
-      } else if (op.isInsert()) {
-        this.aceDoc.insert(this.posFromIndex(index), op.text);
-        index += op.text.length;
-      } else if (op.isDelete()) {
-        from = this.posFromIndex(index);
-        to = this.posFromIndex(index + op.chars);
-        range = this.aceRange.fromPoints(from, to);
-        this.aceDoc.remove(range);
-      }
-    }
-    return this.grabDocumentState();
-  };
-
-  ACEAdapter.prototype.posFromIndex = function(index) {
-    var line, row, _i, _len, _ref;
-    _ref = this.aceDoc.$lines;
-    for (row = _i = 0, _len = _ref.length; _i < _len; row = ++_i) {
-      line = _ref[row];
-      if (index <= line.length) {
-        break;
-      }
-      index -= line.length + 1;
-    }
-    return {
-      row: row,
-      column: index
-    };
-  };
-
-  ACEAdapter.prototype.indexFromPos = function(pos, lines) {
-    var i, index, _i, _ref;
-    if (lines == null) {
-      lines = this.lastDocLines;
-    }
-    index = 0;
-    for (i = _i = 0, _ref = pos.row; 0 <= _ref ? _i < _ref : _i > _ref; i = 0 <= _ref ? ++_i : --_i) {
-      index += this.lastDocLines[i].length + 1;
-    }
-    return index += pos.column;
-  };
-
-  ACEAdapter.prototype.getValue = function() {
-    return this.aceDoc.getValue();
-  };
-
-  ACEAdapter.prototype.getCursor = function() {
-    var e, e2, end, start, _ref, _ref1;
-    try {
-      start = this.indexFromPos(this.aceSession.selection.getRange().start, this.aceDoc.$lines);
-      end = this.indexFromPos(this.aceSession.selection.getRange().end, this.aceDoc.$lines);
-    } catch (_error) {
-      e = _error;
-      try {
-        start = this.indexFromPos(this.lastCursorRange.start);
-        end = this.indexFromPos(this.lastCursorRange.end);
-      } catch (_error) {
-        e2 = _error;
-        console.log("Couldn't figure out the cursor range:", e2, "-- setting it to 0:0.");
-        _ref = [0, 0], start = _ref[0], end = _ref[1];
-      }
-    }
-    if (start > end) {
-      _ref1 = [end, start], start = _ref1[0], end = _ref1[1];
-    }
-    return new firepad.Cursor(start, end);
-  };
-
-  ACEAdapter.prototype.setCursor = function(cursor) {
-    var end, start, _ref;
-    start = this.posFromIndex(cursor.position);
-    end = this.posFromIndex(cursor.selectionEnd);
-    if (cursor.position > cursor.selectionEnd) {
-      _ref = [end, start], start = _ref[0], end = _ref[1];
-    }
-    return this.aceSession.selection.setSelectionRange(new this.aceRange(start.row, start.column, end.row, end.column));
-  };
-
-  ACEAdapter.prototype.setOtherCursor = function(cursor, color, clientId) {
-    var clazz, css, cursorRange, end, justCursor, self, start, _ref,
-      _this = this;
-    if (this.otherCursors == null) {
-      this.otherCursors = {};
-    }
-    cursorRange = this.otherCursors[clientId];
-    if (cursorRange) {
-      cursorRange.start.detach();
-      cursorRange.end.detach();
-      this.aceSession.removeMarker(cursorRange.id);
-    }
-    start = this.posFromIndex(cursor.position);
-    end = this.posFromIndex(cursor.selectionEnd);
-    if (cursor.selectionEnd < cursor.position) {
-      _ref = [end, start], start = _ref[0], end = _ref[1];
-    }
-    clazz = "other-client-selection-" + (color.replace('#', ''));
-    justCursor = cursor.position === cursor.selectionEnd;
-    if (justCursor) {
-      clazz = clazz.replace('selection', 'cursor');
-    }
-    css = "." + clazz + " {\n  position: absolute;\n  background-color: " + (justCursor ? 'transparent' : color) + ";\n  border-left: 2px solid " + color + ";\n}";
-    this.addStyleRule(css);
-    this.otherCursors[clientId] = cursorRange = new this.aceRange(start.row, start.column, end.row, end.column);
-    self = this;
-    cursorRange.clipRows = function() {
-      var range;
-      range = self.aceRange.prototype.clipRows.apply(this, arguments);
-      range.isEmpty = function() {
-        return false;
+      return {
+        row: row,
+        column: index
       };
-      return range;
-    };
-    cursorRange.start = this.aceDoc.createAnchor(cursorRange.start);
-    cursorRange.end = this.aceDoc.createAnchor(cursorRange.end);
-    cursorRange.id = this.aceSession.addMarker(cursorRange, clazz, "text");
-    return {
-      clear: function() {
+    }
+
+    indexFromPos(pos, lines) {
+      var i, index, j, ref;
+      if (lines == null) {
+        lines = this.lastDocLines;
+      }
+      index = 0;
+      for (i = j = 0, ref = pos.row; (0 <= ref ? j < ref : j > ref); i = 0 <= ref ? ++j : --j) {
+        index += this.lastDocLines[i].length + 1;
+      }
+      return index += pos.column;
+    }
+
+    getValue() {
+      return this.aceDoc.getValue();
+    }
+
+    getCursor() {
+      var e, e2, end, start;
+      try {
+        start = this.indexFromPos(this.aceSession.selection.getRange().start, this.aceDoc.$lines);
+        end = this.indexFromPos(this.aceSession.selection.getRange().end, this.aceDoc.$lines);
+      } catch (error) {
+        e = error;
+        try {
+          // If the new range doesn't work (sometimes with setValue), we'll use the old range
+          start = this.indexFromPos(this.lastCursorRange.start);
+          end = this.indexFromPos(this.lastCursorRange.end);
+        } catch (error) {
+          e2 = error;
+          console.log("Couldn't figure out the cursor range:", e2, "-- setting it to 0:0.");
+          [start, end] = [0, 0];
+        }
+      }
+      if (start > end) {
+        [start, end] = [end, start];
+      }
+      return new firepad.Cursor(start, end);
+    }
+
+    setCursor(cursor) {
+      var end, start;
+      start = this.posFromIndex(cursor.position);
+      end = this.posFromIndex(cursor.selectionEnd);
+      if (cursor.position > cursor.selectionEnd) {
+        [start, end] = [end, start];
+      }
+      return this.aceSession.selection.setSelectionRange(new this.aceRange(start.row, start.column, end.row, end.column));
+    }
+
+    setOtherCursor(cursor, color, clientId) {
+      var clazz, css, cursorRange, end, justCursor, self, start;
+      if (this.otherCursors == null) {
+        this.otherCursors = {};
+      }
+      cursorRange = this.otherCursors[clientId];
+      if (cursorRange) {
         cursorRange.start.detach();
         cursorRange.end.detach();
-        return _this.aceSession.removeMarker(cursorRange.id);
+        this.aceSession.removeMarker(cursorRange.id);
       }
-    };
-  };
-
-  ACEAdapter.prototype.addStyleRule = function(css) {
-    var styleElement;
-    if (typeof document === "undefined" || document === null) {
-      return;
+      start = this.posFromIndex(cursor.position);
+      end = this.posFromIndex(cursor.selectionEnd);
+      if (cursor.selectionEnd < cursor.position) {
+        [start, end] = [end, start];
+      }
+      clazz = `other-client-selection-${color.replace('#', '')}`;
+      justCursor = cursor.position === cursor.selectionEnd;
+      if (justCursor) {
+        clazz = clazz.replace('selection', 'cursor');
+      }
+      css = `.${clazz} {\n  position: absolute;\n  background-color: ${(justCursor ? 'transparent' : color)};\n  border-left: 2px solid ${color};\n}`;
+      this.addStyleRule(css);
+      this.otherCursors[clientId] = cursorRange = new this.aceRange(start.row, start.column, end.row, end.column);
+      // Hack this specific range to, when clipped, return an empty range that
+      // pretends to not be empty. This lets us draw markers at the ends of lines.
+      // This might be brittle in the future.
+      self = this;
+      cursorRange.clipRows = function() {
+        var range;
+        range = self.aceRange.prototype.clipRows.apply(this, arguments);
+        range.isEmpty = function() {
+          return false;
+        };
+        return range;
+      };
+      cursorRange.start = this.aceDoc.createAnchor(cursorRange.start);
+      cursorRange.end = this.aceDoc.createAnchor(cursorRange.end);
+      cursorRange.id = this.aceSession.addMarker(cursorRange, clazz, "text");
+      return {
+        // Return something with a clear method to mimic expected API from CodeMirror
+        clear: () => {
+          cursorRange.start.detach();
+          cursorRange.end.detach();
+          return this.aceSession.removeMarker(cursorRange.id);
+        }
+      };
     }
-    if (!this.addedStyleRules) {
-      this.addedStyleRules = {};
-      styleElement = document.createElement('style');
-      document.documentElement.getElementsByTagName('head')[0].appendChild(styleElement);
-      this.addedStyleSheet = styleElement.sheet;
+
+    addStyleRule(css) {
+      var styleElement;
+      if (typeof document === "undefined" || document === null) {
+        return;
+      }
+      if (!this.addedStyleRules) {
+        this.addedStyleRules = {};
+        styleElement = document.createElement('style');
+        document.documentElement.getElementsByTagName('head')[0].appendChild(styleElement);
+        this.addedStyleSheet = styleElement.sheet;
+      }
+      if (this.addedStyleRules[css]) {
+        return;
+      }
+      this.addedStyleRules[css] = true;
+      return this.addedStyleSheet.insertRule(css, 0);
     }
-    if (this.addedStyleRules[css]) {
-      return;
+
+    registerCallbacks(callbacks) {
+      this.callbacks = callbacks;
     }
-    this.addedStyleRules[css] = true;
-    return this.addedStyleSheet.insertRule(css, 0);
-  };
 
-  ACEAdapter.prototype.registerCallbacks = function(callbacks) {
-    this.callbacks = callbacks;
-  };
-
-  ACEAdapter.prototype.trigger = function() {
-    var args, event, _ref, _ref1;
-    event = arguments[0], args = 2 <= arguments.length ? __slice.call(arguments, 1) : [];
-    return (_ref = this.callbacks) != null ? (_ref1 = _ref[event]) != null ? _ref1.apply(this, args) : void 0 : void 0;
-  };
-
-  ACEAdapter.prototype.applyOperation = function(operation) {
-    if (!operation.isNoop()) {
-      this.ignoreChanges = true;
+    trigger(event, ...args) {
+      var ref, ref1;
+      return (ref = this.callbacks) != null ? (ref1 = ref[event]) != null ? ref1.apply(this, args) : void 0 : void 0;
     }
-    this.applyOperationToACE(operation);
-    return this.ignoreChanges = false;
+
+    applyOperation(operation) {
+      if (!operation.isNoop()) {
+        this.ignoreChanges = true;
+      }
+      this.applyOperationToACE(operation);
+      return this.ignoreChanges = false;
+    }
+
+    registerUndo(undoFn) {
+      return this.ace.undo = undoFn;
+    }
+
+    registerRedo(redoFn) {
+      return this.ace.redo = redoFn;
+    }
+
+    invertOperation(operation) {
+      // TODO: Optimize to avoid copying entire text?
+      return operation.invert(this.getValue());
+    }
+
   };
 
-  ACEAdapter.prototype.registerUndo = function(undoFn) {
-    return this.ace.undo = undoFn;
-  };
-
-  ACEAdapter.prototype.registerRedo = function(redoFn) {
-    return this.ace.redo = redoFn;
-  };
-
-  ACEAdapter.prototype.invertOperation = function(operation) {
-    return operation.invert(this.getValue());
-  };
+  ACEAdapter.prototype.ignoreChanges = false;
 
   return ACEAdapter;
 
-})();
+}).call(this);
+
+'use strict';
+
+/**
+ * @function getCSS - For Internal Usage Only
+ * @param {String} clazz - CSS Class Name
+ * @param {String} bgColor - Background Color
+ * @param {String} color - Font Color
+ * @returns CSS Style Rules according to Parameters
+ */
+var getCSS = function getCSS(clazz, bgColor, color) {
+  return "." + clazz + " {\n  position: relative;\n" +
+    "background-color: " + bgColor + ";\n" +
+    "border-left: 2px solid " + color + ";\n}";
+};
+
+/**
+ * @function addStyleRule - For Internal Usage Only
+ * @desc Creates style element in document head and pushed all the style rules
+ * @param {String} clazz - CSS Class Name
+ * @param {String} css - CSS Style Rules
+ */
+var addStyleRule = function addStyleRule(clazz, css) {
+  /** House Keeping */
+  if (typeof document === 'undefined' || document === null) {
+    return false;
+  }
+
+  /** Add style rules only once */
+  if (this.addedStyleRules.indexOf(clazz) === -1) {
+    var styleElement = document.createElement('style');
+    var styleSheet = document.createTextNode(css);
+    styleElement.appendChild(styleSheet);
+    document.head.appendChild(styleElement);
+    this.addedStyleRules.push(clazz);
+  }
+};
+
+/**
+ * Monaco Adapter
+ * Create Pipe between Firebase and Monaco Text Editor
+ */
+var MonacoAdapter = function () {
+  /**
+   * @constructor MonacoEditor
+   * @param {MonacoEditor} monacoInstance - Editor Instance
+   * @prop {MonacoEditor} monaco - Monaco Instance passed as Parameter
+   * @prop {MonacoITextModel} monacoModel - Data Model of the Monaco Instance
+   * @prop {string[]} lastDocLines - Text for all Lines in the Editor
+   * @prop {MonacoSelection} lastCursorRange - Primary Selection of the Editor
+   * @prop {function} onChange - Change Event Handler bound Local Object
+   * @prop {function} onBlur - Blur Event Handler bound Local Object
+   * @prop {function} onFocus - Focus Event Handler bound Local Object
+   * @prop {function} onCursorActivity - Cursor Activity Handler bound Local Object
+   * @prop {Boolean} ignoreChanges - Should Avoid OnChange Event Handling
+   * @prop {MonacoIDisposable} changeHandler - Event Handler for Model Content Change
+   * @prop {MonacoIDisposable} didBlurHandler - Event Handler for Focus Lost on Editor Text/Widget
+   * @prop {MonacoIDisposable} didFocusHandler - Event Handler for Focus Gain on Editor Text/Widget
+   * @prop {MonacoIDisposable} didChangeCursorPositionHandler - Event Handler for Cursor Position Change
+   */
+  function MonacoAdapter(monacoInstance) {
+    /** House Keeping */
+    if (monacoInstance !== null && typeof global !== 'undefined' && global.monaco
+      && !monacoInstance instanceof global.monaco) {
+
+      throw new Error('MonacoAdapter: Incorrect Parameter Recieved in constructor, '
+        + 'expected valid Monaco Instance');
+    }
+
+    /** Monaco Member Variables */
+    this.monaco = monacoInstance;
+    this.monacoModel = this.monaco.getModel();
+    this.lastDocLines = this.monacoModel.getLinesContent();
+    this.lastCursorRange = this.monaco.getSelection();
+
+    /** Monaco Editor Configurations */
+    this.callbacks = {};
+    this.otherCursors = [];
+    this.addedStyleRules = [];
+    this.ignoreChanges = false;
+
+    /** Adapter Callback Functions */
+    this.onChange = this.onChange.bind(this);
+    this.onBlur = this.onBlur.bind(this);
+    this.onFocus = this.onFocus.bind(this);
+    this.onCursorActivity = this.onCursorActivity.bind(this);
+
+    /** Editor Callback Handler */
+    this.changeHandler = this.monaco.onDidChangeModelContent(this.onChange);
+    this.didBlurHandler = this.monaco.onDidBlurEditorWidget(this.onBlur);
+    this.didFocusHandler = this.monaco.onDidFocusEditorWidget(this.onFocus);
+    this.didChangeCursorPositionHandler = this.monaco.onDidChangeCursorPosition(this.onCursorActivity);
+  }
+
+  /**
+   * @method detach - Clears an Instance of Editor Adapter
+   */
+  MonacoAdapter.prototype.detach = function detach() {
+    this.changeHandler.dispose();
+    this.didBlurHandler.dispose();
+    this.didFocusHandler.dispose();
+    this.didChangeCursorPositionHandler.dispose();
+  };
+
+  /**
+   * @method getCursor - Get current cursor position
+   * @returns Firepad Cursor object
+   */
+  MonacoAdapter.prototype.getCursor = function getCursor() {
+    var selection = this.monaco.getSelection();
+
+    /** Fallback to last cursor change */
+    if (typeof selection === 'undefined' || selection === null) {
+      selection = this.lastCursorRange;
+    }
+
+    /** Obtain selection indexes */
+    var startPos = selection.getStartPosition();
+    var endPos = selection.getEndPosition();
+    var start = this.monacoModel.getOffsetAt(startPos);
+    var end = this.monacoModel.getOffsetAt(endPos);
+
+    /** If Selection is Inversed */
+    if (start > end) {
+      var _ref = [end, start];
+      start = _ref[0];
+      end = _ref[1];
+    }
+
+    /** Return cursor position */
+    return new firepad.Cursor(start, end);
+  };
+
+  /**
+   * @method setCursor - Set Selection on Monaco Editor Instance
+   * @param {Object} cursor - Cursor Position (start and end)
+   * @param {Number} cursor.position - Starting Position of the Cursor
+   * @param {Number} cursor.selectionEnd - Ending Position of the Cursor
+   */
+  MonacoAdapter.prototype.setCursor = function setCursor(cursor) {
+    var position = cursor.position;
+    var selectionEnd = cursor.selectionEnd;
+    var start = this.monacoModel.getPositionAt(position);
+    var end = this.monacoModel.getPositionAt(selectionEnd);
+
+    /** If selection is inversed */
+    if (position > selectionEnd) {
+      var _ref = [end, start];
+      start = _ref[0];
+      end = _ref[1];
+    }
+
+    /** Create Selection in the Editor */
+    this.monaco.setSelection(
+      new monaco.Range(
+        start.lineNumber, start.column,
+        end.lineNumber, end.column
+      )
+    );
+  };
+
+  /**
+   * @method setOtherCursor - Set Remote Selection on Monaco Editor
+   * @param {Number} cursor.position - Starting Position of the Selection
+   * @param {Number} cursor.selectionEnd - Ending Position of the Selection
+   * @param {String} color - Hex Color codes for Styling
+   * @param {any} clientID - ID number of the Remote Client
+   */
+  MonacoAdapter.prototype.setOtherCursor = function setOtherCursor(cursor, color, clientID) {
+    /** House Keeping */
+    if (typeof cursor !== 'object' || typeof cursor.position !== 'number'
+      || typeof cursor.selectionEnd !== 'number') {
+
+      return false;
+    }
+
+    if (typeof color !== 'string' || !color.match(/^#[a-fA-F0-9]{3,6}$/)) {
+      return false;
+    }
+
+    /** Extract Positions */
+    var position = cursor.position;
+    var selectionEnd = cursor.selectionEnd;
+
+    if (position < 0 || selectionEnd < 0) {
+      return false;
+    }
+
+    /** Fetch Client Cursor Information */
+    var otherCursor = this.otherCursors.find(function (cursor) {
+      return cursor.clientID === clientID;
+    });
+
+    /** Initialize empty array, if client does not exist */
+    if (!otherCursor) {
+      otherCursor = {
+        clientID: clientID,
+        decoration: []
+      };
+      this.otherCursors.push(otherCursor);
+    }
+
+    /** Remove Earlier Decorations, if any, or initialize empty decor */
+    otherCursor.decoration = this.monaco.deltaDecorations(otherCursor.decoration, []);
+    var clazz = "other-client-selection-" + color.replace('#', '');
+    var css, ret;
+
+    if (position === selectionEnd) {
+      /** Show only cursor */
+      clazz = clazz.replace('selection', 'cursor');
+
+      /** Generate Style rules and add them to document */
+      css = getCSS(clazz, 'transparent', color);
+      ret = addStyleRule.call(this, clazz, css);
+    } else {
+      /** Generate Style rules and add them to document */
+      css = getCSS(clazz, color, color);
+      ret = addStyleRule.call(this, clazz, css);
+    }
+
+    /** Return if failed to add css */
+    if (ret == false) {
+      console.log("Monaco Adapter: Failed to add some css style.\n"
+      + "Please make sure you're running on supported environment.");
+    }
+
+    /** Get co-ordinate position in Editor */
+    var start = this.monacoModel.getPositionAt(position);
+    var end = this.monacoModel.getPositionAt(selectionEnd);
+
+    /** Selection is inversed */
+    if (position > selectionEnd) {
+      var _ref = [end, start];
+      start = _ref[0];
+      end = _ref[1];
+    }
+
+    /** Add decoration to the Editor */
+    otherCursor.decoration = this.monaco.deltaDecorations(otherCursor.decoration,
+      [
+        {
+          range: new monaco.Range(
+            start.lineNumber, start.column,
+            end.lineNumber, end.column
+          ),
+          options: {
+            className: clazz
+          }
+        }
+      ]
+    );
+
+    /** Clear cursor method */
+    var _this = this;
+    return {
+      clear: function clear() {
+        otherCursor.decoration = _this.monaco.deltaDecorations(otherCursor.decoration, []);
+      }
+    };
+  };
+
+  /**
+   * @method registerCallbacks - Assign callback functions to internal property
+   * @param {function[]} callbacks - Set of callback functions
+   */
+  MonacoAdapter.prototype.registerCallbacks = function registerCallbacks(callbacks) {
+    this.callbacks = Object.assign({}, this.callbacks, callbacks);
+  };
+
+  /**
+   * @method registerUndo
+   * @param {function} callback - Callback Handler for Undo Event
+   */
+  MonacoAdapter.prototype.registerUndo = function registerUndo(callback) {
+    if (typeof callback === 'function') {
+      this.callbacks.undo = callback;
+    } else {
+      throw new Error('MonacoAdapter: registerUndo method expects a '
+        + 'callback function in parameter');
+    }
+  };
+
+  /**
+   * @method registerRedo
+   * @param {function} callback - Callback Handler for Redo Event
+   */
+  MonacoAdapter.prototype.registerRedo = function registerRedo(callback) {
+    if (typeof callback === 'function') {
+      this.callbacks.redo = callback;
+    } else {
+      throw new Error('MonacoAdapter: registerRedo method expects a '
+        + 'callback function in parameter');
+    }
+  };
+
+  /**
+   * @method operationFromMonacoChanges - Convert Monaco Changes to OT.js Ops
+   * @param {Object} change - Change in Editor
+   * @param {string} content - Last Editor Content
+   * @param {Number} offset - Offset between changes of same event
+   * @returns Pair of Operation and Inverse
+   * Note: OT.js Operation expects the cursor to be at the end of content
+   */
+  MonacoAdapter.prototype.operationFromMonacoChanges = function operationFromMonacoChanges(change, content, offset) {
+    /** Change Informations */
+    var text = change.text;
+    var rangeLength = change.rangeLength;
+    var rangeOffset = change.rangeOffset + offset;
+
+    /** Additional SEEK distance */
+    var restLength = content.length + offset - rangeOffset;
+
+    /** Declare OT.js Operation Variables */
+    var change_op, inverse_op, replaced_text;
+
+    if (text.length === 0 && rangeLength > 0) {
+      /** Delete Operation */
+      replaced_text = content.slice(rangeOffset, rangeOffset + rangeLength);
+
+      change_op = new firepad.TextOperation()
+        .retain(rangeOffset)
+        .delete(rangeLength)
+        .retain(restLength - rangeLength);
+
+      inverse_op = new firepad.TextOperation()
+        .retain(rangeOffset)
+        .insert(replaced_text)
+        .retain(restLength - rangeLength);
+    } else if (text.length > 0 && rangeLength > 0) {
+      /** Replace Operation */
+      replaced_text = content.slice(rangeOffset, rangeOffset + rangeLength);
+
+      change_op = new firepad.TextOperation()
+        .retain(rangeOffset)
+        .delete(rangeLength)
+        .insert(text)
+        .retain(restLength - rangeLength);
+
+      inverse_op = new firepad.TextOperation()
+        .retain(rangeOffset)
+        .delete(text.length)
+        .insert(replaced_text)
+        .retain(restLength - rangeLength);
+    } else {
+      /** Insert Operation */
+      change_op = new firepad.TextOperation()
+        .retain(rangeOffset)
+        .insert(text)
+        .retain(restLength);
+
+      inverse_op = new firepad.TextOperation()
+        .retain(rangeOffset)
+        .delete(text)
+        .retain(restLength);
+    }
+
+    return [ change_op, inverse_op ];
+  };
+
+  /**
+   * @method onChange - OnChange Event Handler
+   * @param {Object} event - OnChange Event Delegate
+   */
+  MonacoAdapter.prototype.onChange = function onChange(event) {
+    var _this = this;
+
+    if (!this.ignoreChanges) {
+      var content = this.lastDocLines.join(this.monacoModel.getEOL());
+      var offset = 0;
+
+      /** If no change information recieved */
+      if (!event.changes) {
+        var op = new firepad.TextOperation().retain(content.length);
+        this.trigger('change', op, op);
+      }
+
+      /** Reverse iterate all changes */
+      event.changes.reverse().forEach(function (change) {
+        var pair = _this.operationFromMonacoChanges(change, content, offset);
+        offset += pair[0].targetLength - pair[0].baseLength;
+
+        _this.trigger.apply(_this, ['change'].concat(pair));
+      });
+
+      /** Update Editor Content */
+      this.lastDocLines = this.monacoModel.getLinesContent();
+    }
+  };
+
+  /**
+   * @method trigger - Event Handler
+   * @param {string} event - Event name
+   * @param  {...any} args - Callback arguments
+   */
+  MonacoAdapter.prototype.trigger = function trigger(event) {
+    if (!this.callbacks.hasOwnProperty(event)) {
+      return;
+    }
+
+    var action = this.callbacks[event];
+
+    if (! typeof action === 'function') {
+      return;
+    }
+
+    var args = [];
+
+    if (arguments.length > 1) {
+      for (var i = 1; i < arguments.length; i++) {
+        args.push(arguments[i]);
+      }
+    }
+
+    action.apply(null, args);
+  };
+
+  /**
+   * @method onBlur - Blur event handler
+   */
+  MonacoAdapter.prototype.onBlur = function onBlur() {
+    if (this.monaco.getSelection().isEmpty()) {
+      this.trigger('blur');
+    }
+  };
+
+  /**
+   * @method onFocus - Focus event handler
+   */
+  MonacoAdapter.prototype.onFocus = function onFocus() {
+    this.trigger('focus');
+  };
+
+  /**
+   * @method onCursorActivity - CursorActivity event handler
+   */
+  MonacoAdapter.prototype.onCursorActivity = function onCursorActivity() {
+    var _this = this;
+
+    setTimeout(function () {
+      return _this.trigger('cursorActivity');
+    }, 1);
+  };
+
+  /**
+   * @method applyOperation
+   * @param {Operation} operation - OT.js Operation Object
+   */
+  MonacoAdapter.prototype.applyOperation = function applyOperation(operation) {
+    if (!operation.isNoop()) {
+      this.ignoreChanges = true;
+    }
+
+    /** Get Operations List */
+    var opsList = operation.ops;
+    var index = 0;
+
+    var _this = this;
+    opsList.forEach(function (op) {
+      /** Retain Operation */
+      if (op.isRetain()) {
+        index += op.chars;
+      } else if (op.isInsert()) {
+        /** Insert Operation */
+        var pos = _this.monacoModel.getPositionAt(index);
+
+        _this.monaco.executeEdits('my-source', [{
+          range: new monaco.Range(
+            pos.lineNumber, pos.column,
+            pos.lineNumber, pos.column
+          ),
+          text: op.text,
+          forceMoveMarkers: true
+        }]);
+
+        index += op.text.length;
+      } else if (op.isDelete()) {
+        /** Delete Operation */
+        var from = _this.monacoModel.getPositionAt(index);
+        var to = _this.monacoModel.getPositionAt(index + op.chars);
+
+        _this.monaco.executeEdits('my-source', [{
+          range: new monaco.Range(
+            from.lineNumber, from.column,
+            to.lineNumber, to.column
+          ),
+          text: '',
+          forceMoveMarkers: true
+        }]);
+      }
+    });
+
+    /** Update Editor Content and Reset Config */
+    this.lastDocLines = this.monacoModel.getLinesContent();
+    this.ignoreChanges = false;
+  };
+
+  /**
+   * @method invertOperation
+   * @param {Operation} operation - OT.js Operation Object
+   */
+  MonacoAdapter.prototype.invertOperation = function invertOperation(operation) {
+    operation.invert(this.getValue());
+  };
+
+  return MonacoAdapter;
+}(); /** Export Module */
+
+
+firepad.MonacoAdapter = MonacoAdapter;
 
 var firepad = firepad || { };
 
@@ -5497,7 +6016,7 @@ firepad.Headless = (function() {
       var text = doc.apply('');
 
       // Strip out any special characters from Rich Text formatting
-      for (key in firepad.sentinelConstants) {
+      for (var key in firepad.sentinelConstants) {
         text = text.replace(new RegExp(firepad.sentinelConstants[key], 'g'), '');
       }
       callback(text);
@@ -5517,17 +6036,18 @@ firepad.Headless = (function() {
     if (typeof document === 'object' || typeof firepad.document === 'object') {
       callback();
     } else {
-      require('jsdom').env('<head></head><body></body>', function(err, window) {
-        if (firepad.document) {
-          // Return if we've already made a jsdom to avoid making more than one
-          // This would be easier with promises but we want to avoid introducing
-          // another dependency for just headless mode.
-          window.close();
-          return callback();
-        }
-        firepad.document = window.document;
-        callback();
-      });
+      const jsdom = require('jsdom');
+      const { JSDOM } = jsdom;
+      const { window } = new JSDOM("<head></head><body></body>");
+      if (firepad.document) {
+        // Return if we've already made a jsdom to avoid making more than one
+        // This would be easier with promises but we want to avoid introducing
+        // another dependency for just headless mode.
+        window.close();
+        return callback();
+      }
+      firepad.document = window.document;
+      callback();
     }
   }
 
@@ -5601,18 +6121,22 @@ firepad.Firepad = (function(global) {
   var RichTextCodeMirror = firepad.RichTextCodeMirror;
   var RichTextToolbar = firepad.RichTextToolbar;
   var ACEAdapter = firepad.ACEAdapter;
+  var MonacoAdapter = firepad.MonacoAdapter;
   var FirebaseAdapter = firepad.FirebaseAdapter;
   var EditorClient = firepad.EditorClient;
   var EntityManager = firepad.EntityManager;
   var ATTR = firepad.AttributeConstants;
   var utils = firepad.utils;
   var LIST_TYPE = firepad.LineFormatting.LIST_TYPE;
+  var CodeMirror = global.CodeMirror;
+  var ace = global.ace;
+  var monaco = global.monaco;
 
   function Firepad(ref, place, options) {
     if (!(this instanceof Firepad)) { return new Firepad(ref, place, options); }
 
-    if (!CodeMirror && !ace) {
-      throw new Error('Couldn\'t find CodeMirror or ACE.  Did you forget to include codemirror.js or ace.js?');
+    if (!CodeMirror && !ace && !global.monaco) {
+      throw new Error('Couldn\'t find CodeMirror, ACE or Monaco.  Did you forget to include codemirror.js/ace.js or import monaco?');
     }
 
     this.zombie_ = false;
@@ -5629,11 +6153,27 @@ firepad.Firepad = (function(global) {
       if (curValue !== '') {
         throw new Error("Can't initialize Firepad with an ACE instance that already contains text.");
       }
+    } else if (global.monaco && place && place instanceof global.monaco.constructor) {
+      monaco = global.monaco;
+      this.monaco_ = this.editor_ = place;
+      curValue = this.monaco_.getValue();
+      if (curValue !== '') {
+        throw new Error("Can't initialize Firepad with a Monaco instance that already contains text.");
+      }
     } else {
       this.codeMirror_ = this.editor_ = new CodeMirror(place);
     }
 
-    var editorWrapper = this.codeMirror_ ? this.codeMirror_.getWrapperElement() : this.ace_.container;
+    var editorWrapper;
+    if (this.codeMirror_) {
+      editorWrapper = this.codeMirror_.getWrapperElement();
+    } else if (this.ace_) {
+      editorWrapper = this.ace_.container;
+    } else {
+      editorWrapper = this.monaco_.getDomNode()
+    }
+
+    // var editorWrapper = this.codeMirror_ ? this.codeMirror_.getWrapperElement() : this.ace_.container;
     this.firepadWrapper_ = utils.elt("div", null, { 'class': 'firepad' });
     editorWrapper.parentNode.replaceChild(this.firepadWrapper_, editorWrapper);
     this.firepadWrapper_.appendChild(editorWrapper);
@@ -5676,8 +6216,10 @@ firepad.Firepad = (function(global) {
     if (this.codeMirror_) {
       this.richTextCodeMirror_ = new RichTextCodeMirror(this.codeMirror_, this.entityManager_, { cssPrefix: 'firepad-' });
       this.editorAdapter_ = new RichTextCodeMirrorAdapter(this.richTextCodeMirror_);
-    } else {
+    } else if (this.ace_) {
       this.editorAdapter_ = new ACEAdapter(this.ace_);
+    } else {
+      this.editorAdapter_ = new MonacoAdapter(this.monaco_);
     }
     this.client_ = new EditorClient(this.firebaseAdapter_, this.editorAdapter_);
 
@@ -5696,6 +6238,9 @@ firepad.Firepad = (function(global) {
       self.ready_ = true;
 
       if (this.ace_) {
+        this.editorAdapter_.grabDocumentState();
+      }
+      if (this.monaco_) {
         this.editorAdapter_.grabDocumentState();
       }
 
@@ -5729,12 +6274,22 @@ firepad.Firepad = (function(global) {
   // For readability, these are the primary "constructors", even though right now they're just aliases for Firepad.
   Firepad.fromCodeMirror = Firepad;
   Firepad.fromACE = Firepad;
+  Firepad.fromMonaco = Firepad;
+
 
   Firepad.prototype.dispose = function() {
     this.zombie_ = true; // We've been disposed.  No longer valid to do anything.
 
     // Unwrap the editor.
-    var editorWrapper = this.codeMirror_ ? this.codeMirror_.getWrapperElement() : this.ace_.container;
+    // var editorWrapper = this.codeMirror_ ? this.codeMirror_.getWrapperElement() : this.ace_.container;
+    if (this.codeMirror_) {
+        editorWrapper = this.codeMirror_.getWrapperElement();
+    } else if (this.ace_) {
+        editorWrapper = this.ace_.container;
+    } else {
+        editorWrapper = this.monaco_.getDomNode()
+    }
+
     this.firepadWrapper_.removeChild(editorWrapper);
     this.firepadWrapper_.parentNode.replaceChild(editorWrapper, this.firepadWrapper_);
 
@@ -5766,13 +6321,17 @@ firepad.Firepad = (function(global) {
     this.assertReady_('getText');
     if (this.codeMirror_)
       return this.richTextCodeMirror_.getText();
-    else
+    else if (this.ace_)
       return this.ace_.getSession().getDocument().getValue();
+    else
+      return this.monaco_.getModel().getValue();
   };
 
   Firepad.prototype.setText = function(textPieces) {
-    this.assertReady_('setText');
-    if (this.ace_) {
+      this.assertReady_('setText');
+    if (this.monaco_) {
+      return this.monaco_.getModel().setValue(textPieces);
+    } else if (this.ace_) {
       return this.ace_.getSession().getDocument().setValue(textPieces);
     } else {
       // HACK: Hide CodeMirror during setText to prevent lots of extra renders.
@@ -5791,6 +6350,7 @@ firepad.Firepad = (function(global) {
 
   Firepad.prototype.insertText = function(index, textPieces) {
     utils.assert(!this.ace_, "Not supported for ace yet.");
+    utils.assert(!this.monaco_, "Not supported for monaco yet.");
     this.assertReady_('insertText');
 
     // Wrap it in an array if it's not already.
@@ -6203,5 +6763,6 @@ firepad.Firepad.Headless = firepad.Headless;
 // Export adapters
 firepad.Firepad.RichTextCodeMirrorAdapter = firepad.RichTextCodeMirrorAdapter;
 firepad.Firepad.ACEAdapter = firepad.ACEAdapter;
+firepad.Firepad.MonacoAdapter = firepad.MonacoAdapter;
 
 return firepad.Firepad; }, this);
