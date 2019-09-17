@@ -1546,10 +1546,19 @@ firepad.FirebaseAdapter = (function (global) {
     var self=this;
     query.once('value', function(s) {
       if (typeof s.val() === 'undefined' || s.val() === null || !s.hasChildren()) return;
-      s.forEach(function(rev) { 
-        // utils.log('removing old revision: '+rev.key);
+      const remove = (remaining) => {
+        const rev = remaining.pop();
+        utils.log('removing old revision: '+rev.key);
         rev.ref.remove();
-      });
+        if (remaining.length) {
+          setTimeout(() => { remove(remaining); }, 500);
+        }
+      }
+      remove(s);
+      // s.forEach(function(rev) { 
+      //   // utils.log('removing old revision: '+rev.key);
+      //   rev.ref.remove();
+      // });
       setTimeout(function() { self.deleteOldRevisions_(query); }, 1000); // delete the next one
     });
   }
