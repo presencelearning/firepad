@@ -1554,7 +1554,11 @@ firepad.FirebaseAdapter = (function (global) {
           setTimeout(() => { remove(remaining); }, 500);
         }
       }
-      remove(s);
+      const revArray = [];
+      s.forEach(function(rev) { 
+        revArray.push(rev);
+      });
+      remove(revArray);
       // s.forEach(function(rev) { 
       //   // utils.log('removing old revision: '+rev.key);
       //   rev.ref.remove();
