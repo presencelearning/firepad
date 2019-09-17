@@ -1550,7 +1550,7 @@ firepad.FirebaseAdapter = (function (global) {
         utils.log('removing old revision: '+rev.key);
         rev.ref.remove();
       });
-      setTimeout(function() { self.deleteOldRevisions_(query); }, 100); // delete the next one
+      setTimeout(function() { self.deleteOldRevisions_(query); }, 1000); // delete the next one
     });
   }
 
