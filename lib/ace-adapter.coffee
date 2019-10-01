@@ -23,7 +23,7 @@ class firepad.ACEAdapter
   detach: ->
     @ace.removeListener 'change', @onChange
     @ace.removeListener 'blur', @onBlur
-    @ace.removeListener 'focus', @onCursorActivity
+    @ace.removeListener 'focus', @onFocus
     @aceSession.selection.removeListener 'changeCursor', @onCursorActivity
 
   onChange: (change) =>
@@ -60,7 +60,7 @@ class firepad.ACEAdapter
       # Ace 1.2.0+
       text = change.lines.join('\n')
       start = @indexFromPos change.start
-    
+
     restLength = @lastDocLines.join('\n').length - start
     restLength -= text.length if change.action is 'remove'
     insert_op = new firepad.TextOperation().retain(start).insert(text).retain(restLength)
