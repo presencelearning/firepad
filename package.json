@@ -1,7 +1,6 @@
 {
   "name": "firepad",
   "description": "Collaborative text editing powered by Firebase",
-
   "version": "1.5.3",
   "author": "Firebase (https://firebase.google.com/)",
   "contributors": [

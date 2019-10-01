@@ -1546,23 +1546,16 @@ firepad.FirebaseAdapter = (function (global) {
     var self=this;
     query.once('value', function(s) {
       if (typeof s.val() === 'undefined' || s.val() === null || !s.hasChildren()) return;
-      const remove = (remaining) => {
-        const rev = remaining.pop();
-        utils.log('removing old revision: '+rev.key);
-        rev.ref.remove();
-        if (remaining.length) {
-          setTimeout(() => { remove(remaining); }, 500);
-        }
+      const length = Object.keys(s.val()).length;
+      utils.log('firepad revision history length: ', length);
+      if (length > 10000) {
+        // don't attempt to delete extremely large history locally
+        utils.log('History too large to clean up!');
+        return;
       }
-      const revArray = [];
-      s.forEach(function(rev) { 
-        revArray.push(rev);
+      s.forEach(function(rev) {
+        rev.ref.remove();
       });
-      remove(revArray);
-      // s.forEach(function(rev) { 
-      //   // utils.log('removing old revision: '+rev.key);
-      //   rev.ref.remove();
-      // });
       setTimeout(function() { self.deleteOldRevisions_(query); }, 1000); // delete the next one
     });
   }
@@ -1588,10 +1581,6 @@ firepad.FirebaseAdapter = (function (global) {
         historyRef.child(revisionId+'/t').once('value', function(s) {
           if (typeof s.val() !== 'undefined' && s.val() !== null) {
             var weekBefore=s.val()-(24*60*60*1000*7);
-            // var weekBefore=s.val()-(60*1000);
-            //utils.log('checkpoint revision: '+self.checkpointRevision_);
-            //utils.log('checkpoint time: ' + new Date(s.val()));
-            //utils.log('remove before: ' + new Date(weekBefore));
             self.deleteOldRevisions_(historyRef.orderByChild('t').endAt(weekBefore));
           }
         });
