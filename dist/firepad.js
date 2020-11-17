@@ -1580,7 +1580,7 @@ firepad.FirebaseAdapter = (function (global) {
         var historyRef=self.ref_.child('history');
         historyRef.child(revisionId+'/t').once('value', function(s) {
           if (typeof s.val() !== 'undefined' && s.val() !== null) {
-            var weekBefore=s.val()-(24*60*60*1000*7);
+            var weekBefore=s.val()-(24*60*60*1000*2);
             self.deleteOldRevisions_(historyRef.orderByChild('t').endAt(weekBefore));
           }
         });
@@ -6319,8 +6319,14 @@ firepad.Firepad = (function(global) {
         editorWrapper = this.monaco_.getDomNode()
     }
 
-    this.firepadWrapper_.removeChild(editorWrapper);
-    this.firepadWrapper_.parentNode.replaceChild(editorWrapper, this.firepadWrapper_);
+    console.log('dispose editorWrapper: ', editorWrapper);
+    console.log('dispose firepadWrapper_: ', this.firepadWrapper_);
+    try {
+        this.firepadWrapper_.removeChild(editorWrapper);
+        this.firepadWrapper_.parentNode.replaceChild(editorWrapper, this.firepadWrapper_);
+    } catch (e) {
+        console.log('error removing child from firepad: ', e);
+    }
 
     this.editor_.firepad = null;
 
