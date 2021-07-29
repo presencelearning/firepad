@@ -1325,7 +1325,8 @@ var firepad = firepad || { };
 firepad.FirebaseAdapter = (function (global) {
 
   if (typeof firebase === "undefined" && typeof require === 'function' && typeof Firebase !== 'function') {
-    firebase = require('firebase');
+    firebase = require('firebase/app');
+    require('firebase/database');
   }
 
   var TextOperation = firepad.TextOperation;
@@ -6006,7 +6007,8 @@ firepad.Headless = (function() {
     if (typeof refOrPath === 'string') {
       if (window.firebase === undefined && typeof firebase !== 'object') {
             console.log("REQUIRING");
-        firebase = require('firebase');
+        firebase = require('firebase/app');
+        require('firebase/database');
       } else {
         firebase = window.firebase;
       }

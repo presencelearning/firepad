@@ -1320,7 +1320,7 @@ var firepad = firepad || { };
 firepad.FirebaseAdapter = (function (global) {
 
   if (typeof require === 'function' && typeof Firebase !== 'function') {
-    Firebase = require('firebase');
+    Firebase = require('firebase/app');
   }
 
   var TextOperation = firepad.TextOperation;
@@ -5199,7 +5199,7 @@ firepad.Headless = (function() {
 
     if (typeof refOrPath === 'string') {
       if (typeof Firebase !== 'function') {
-        var firebase = require('firebase');
+        var firebase = require('firebase/app');
       } else {
         var firebase = Firebase;
       }
