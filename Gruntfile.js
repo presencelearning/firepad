@@ -70,7 +70,6 @@ module.exports = function (grunt) {
           "lib/undo-manager.js",
           "lib/client.js",
           "lib/editor-client.js",
-          "lib/ace-adapter.js",
           "lib/monaco-adapter.js",
           "lib/constants.js",
           "lib/entity-manager.js",
@@ -84,7 +83,6 @@ module.exports = function (grunt) {
           "lib/parse-html.js",
           "lib/serialize-html.js",
           "lib/text-pieces-to-inserts.js",
-          "lib/headless.js",
           "lib/firepad.js"
         ],
         "dest": "dist/firepad.js"
