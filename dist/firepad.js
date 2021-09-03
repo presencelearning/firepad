@@ -1324,11 +1324,6 @@ var firepad = firepad || { };
 
 firepad.FirebaseAdapter = (function (global) {
 
-  if (typeof firebase === "undefined" && typeof require === 'function' && typeof Firebase !== 'function') {
-    firebase = require('firebase/app');
-    require('firebase/database');
-  }
-
   var TextOperation = firepad.TextOperation;
   var utils = firepad.utils;
 
@@ -2509,400 +2504,6 @@ firepad.EditorClient = (function () {
 
 firepad.utils.makeEventEmitter(firepad.EditorClient, ['synced']);
 
-"use strict";
-
-function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableSpread(); }
-
-function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-
-function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
-
-function _iterableToArray(iter) { if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null) return Array.from(iter); }
-
-function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) return _arrayLikeToArray(arr); }
-
-function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
-
-function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-
-function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
-
-function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); return Constructor; }
-
-var firepad;
-
-if (typeof firepad === "undefined" || firepad === null) {
-  firepad = {};
-}
-
-firepad.ACEAdapter = function () {
-  var ACEAdapter = /*#__PURE__*/function () {
-    function ACEAdapter(aceInstance) {
-      _classCallCheck(this, ACEAdapter);
-
-      var ref;
-      this.onChange = this.onChange.bind(this);
-      this.onBlur = this.onBlur.bind(this);
-      this.onFocus = this.onFocus.bind(this);
-      this.onCursorActivity = this.onCursorActivity.bind(this);
-      this.ace = aceInstance;
-      this.aceSession = this.ace.getSession();
-      this.aceDoc = this.aceSession.getDocument();
-      this.aceDoc.setNewLineMode('unix');
-      this.grabDocumentState();
-      this.ace.on('change', this.onChange);
-      this.ace.on('blur', this.onBlur);
-      this.ace.on('focus', this.onFocus);
-      this.aceSession.selection.on('changeCursor', this.onCursorActivity);
-
-      if (this.aceRange == null) {
-        this.aceRange = ((ref = ace.require) != null ? ref : require)("ace/range").Range;
-      }
-    }
-
-    _createClass(ACEAdapter, [{
-      key: "grabDocumentState",
-      value: function grabDocumentState() {
-        this.lastDocLines = this.aceDoc.getAllLines();
-        return this.lastCursorRange = this.aceSession.selection.getRange();
-      } // Removes all event listeners from the ACE editor instance
-
-    }, {
-      key: "detach",
-      value: function detach() {
-        this.ace.removeListener('change', this.onChange);
-        this.ace.removeListener('blur', this.onBlur);
-        this.ace.removeListener('focus', this.onFocus);
-        return this.aceSession.selection.removeListener('changeCursor', this.onCursorActivity);
-      }
-    }, {
-      key: "onChange",
-      value: function onChange(change) {
-        var pair;
-
-        if (!this.ignoreChanges) {
-          pair = this.operationFromACEChange(change);
-          this.trigger.apply(this, ['change'].concat(_toConsumableArray(pair)));
-          return this.grabDocumentState();
-        }
-      }
-    }, {
-      key: "onBlur",
-      value: function onBlur() {
-        if (this.ace.selection.isEmpty()) {
-          return this.trigger('blur');
-        }
-      }
-    }, {
-      key: "onFocus",
-      value: function onFocus() {
-        return this.trigger('focus');
-      }
-    }, {
-      key: "onCursorActivity",
-      value: function onCursorActivity() {
-        var _this = this;
-
-        return setTimeout(function () {
-          return _this.trigger('cursorActivity');
-        }, 0);
-      } // Converts an ACE change object into a TextOperation and its inverse
-      // and returns them as a two-element array.
-
-    }, {
-      key: "operationFromACEChange",
-      value: function operationFromACEChange(change) {
-        var action, delete_op, delta, insert_op, ref, restLength, start, text;
-
-        if (change.data) {
-          // Ace < 1.2.0
-          delta = change.data;
-
-          if ((ref = delta.action) === 'insertLines' || ref === 'removeLines') {
-            text = delta.lines.join('\n') + '\n';
-            action = delta.action.replace('Lines', '');
-          } else {
-            text = delta.text.replace(this.aceDoc.getNewLineCharacter(), '\n');
-            action = delta.action.replace('Text', '');
-          }
-
-          start = this.indexFromPos(delta.range.start);
-        } else {
-          // Ace 1.2.0+
-          text = change.lines.join('\n');
-          start = this.indexFromPos(change.start);
-        }
-
-        restLength = this.lastDocLines.join('\n').length - start;
-
-        if (change.action === 'remove') {
-          restLength -= text.length;
-        }
-
-        insert_op = new firepad.TextOperation().retain(start).insert(text).retain(restLength);
-        delete_op = new firepad.TextOperation().retain(start)["delete"](text).retain(restLength);
-
-        if (change.action === 'remove') {
-          return [delete_op, insert_op];
-        } else {
-          return [insert_op, delete_op];
-        }
-      } // Apply an operation to an ACE instance.
-
-    }, {
-      key: "applyOperationToACE",
-      value: function applyOperationToACE(operation) {
-        var from, index, j, len, op, range, ref, to;
-        index = 0;
-        ref = operation.ops;
-
-        for (j = 0, len = ref.length; j < len; j++) {
-          op = ref[j];
-
-          if (op.isRetain()) {
-            index += op.chars;
-          } else if (op.isInsert()) {
-            this.aceDoc.insert(this.posFromIndex(index), op.text);
-            index += op.text.length;
-          } else if (op.isDelete()) {
-            from = this.posFromIndex(index);
-            to = this.posFromIndex(index + op.chars);
-            range = this.aceRange.fromPoints(from, to);
-            this.aceDoc.remove(range);
-          }
-        }
-
-        return this.grabDocumentState();
-      }
-    }, {
-      key: "posFromIndex",
-      value: function posFromIndex(index) {
-        var j, len, line, ref, row;
-        ref = this.aceDoc.$lines;
-
-        for (row = j = 0, len = ref.length; j < len; row = ++j) {
-          line = ref[row];
-
-          if (index <= line.length) {
-            break;
-          }
-
-          index -= line.length + 1;
-        }
-
-        return {
-          row: row,
-          column: index
-        };
-      }
-    }, {
-      key: "indexFromPos",
-      value: function indexFromPos(pos, lines) {
-        var i, index, j, ref;
-
-        if (lines == null) {
-          lines = this.lastDocLines;
-        }
-
-        index = 0;
-
-        for (i = j = 0, ref = pos.row; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
-          index += this.lastDocLines[i].length + 1;
-        }
-
-        return index += pos.column;
-      }
-    }, {
-      key: "getValue",
-      value: function getValue() {
-        return this.aceDoc.getValue();
-      }
-    }, {
-      key: "getCursor",
-      value: function getCursor() {
-        var e, e2, end, start;
-
-        try {
-          start = this.indexFromPos(this.aceSession.selection.getRange().start, this.aceDoc.$lines);
-          end = this.indexFromPos(this.aceSession.selection.getRange().end, this.aceDoc.$lines);
-        } catch (error) {
-          e = error;
-
-          try {
-            // If the new range doesn't work (sometimes with setValue), we'll use the old range
-            start = this.indexFromPos(this.lastCursorRange.start);
-            end = this.indexFromPos(this.lastCursorRange.end);
-          } catch (error) {
-            e2 = error;
-            console.log("Couldn't figure out the cursor range:", e2, "-- setting it to 0:0.");
-            start = 0;
-            end = 0;
-          }
-        }
-
-        if (start > end) {
-          var _ref = [end, start];
-          start = _ref[0];
-          end = _ref[1];
-        }
-
-        return new firepad.Cursor(start, end);
-      }
-    }, {
-      key: "setCursor",
-      value: function setCursor(cursor) {
-        var end, start;
-        start = this.posFromIndex(cursor.position);
-        end = this.posFromIndex(cursor.selectionEnd);
-
-        if (cursor.position > cursor.selectionEnd) {
-          var _ref2 = [end, start];
-          start = _ref2[0];
-          end = _ref2[1];
-        }
-
-        return this.aceSession.selection.setSelectionRange(new this.aceRange(start.row, start.column, end.row, end.column));
-      }
-    }, {
-      key: "setOtherCursor",
-      value: function setOtherCursor(cursor, color, clientId) {
-        var _this2 = this;
-
-        var clazz, css, cursorRange, end, justCursor, self, start;
-
-        if (this.otherCursors == null) {
-          this.otherCursors = {};
-        }
-
-        cursorRange = this.otherCursors[clientId];
-
-        if (cursorRange) {
-          cursorRange.start.detach();
-          cursorRange.end.detach();
-          this.aceSession.removeMarker(cursorRange.id);
-        }
-
-        start = this.posFromIndex(cursor.position);
-        end = this.posFromIndex(cursor.selectionEnd);
-
-        if (cursor.selectionEnd < cursor.position) {
-          var _ref3 = [end, start];
-          start = _ref3[0];
-          end = _ref3[1];
-        }
-
-        clazz = "other-client-selection-".concat(color.replace('#', ''));
-        justCursor = cursor.position === cursor.selectionEnd;
-
-        if (justCursor) {
-          clazz = clazz.replace('selection', 'cursor');
-        }
-
-        css = ".".concat(clazz, " {\n  position: absolute;\n  background-color: ").concat(justCursor ? 'transparent' : color, ";\n  border-left: 2px solid ").concat(color, ";\n}");
-        this.addStyleRule(css);
-        this.otherCursors[clientId] = cursorRange = new this.aceRange(start.row, start.column, end.row, end.column); // Hack this specific range to, when clipped, return an empty range that
-        // pretends to not be empty. This lets us draw markers at the ends of lines.
-        // This might be brittle in the future.
-
-        self = this;
-
-        cursorRange.clipRows = function () {
-          var range;
-          range = self.aceRange.prototype.clipRows.apply(this, arguments);
-
-          range.isEmpty = function () {
-            return false;
-          };
-
-          return range;
-        };
-
-        cursorRange.start = this.aceDoc.createAnchor(cursorRange.start);
-        cursorRange.end = this.aceDoc.createAnchor(cursorRange.end);
-        cursorRange.id = this.aceSession.addMarker(cursorRange, clazz, "text");
-        return {
-          // Return something with a clear method to mimic expected API from CodeMirror
-          clear: function clear() {
-            cursorRange.start.detach();
-            cursorRange.end.detach();
-            return _this2.aceSession.removeMarker(cursorRange.id);
-          }
-        };
-      }
-    }, {
-      key: "addStyleRule",
-      value: function addStyleRule(css) {
-        var styleElement;
-
-        if (typeof document === "undefined" || document === null) {
-          return;
-        }
-
-        if (!this.addedStyleRules) {
-          this.addedStyleRules = {};
-          styleElement = document.createElement('style');
-          document.documentElement.getElementsByTagName('head')[0].appendChild(styleElement);
-          this.addedStyleSheet = styleElement.sheet;
-        }
-
-        if (this.addedStyleRules[css]) {
-          return;
-        }
-
-        this.addedStyleRules[css] = true;
-        return this.addedStyleSheet.insertRule(css, 0);
-      }
-    }, {
-      key: "registerCallbacks",
-      value: function registerCallbacks(callbacks) {
-        this.callbacks = callbacks;
-      }
-    }, {
-      key: "trigger",
-      value: function trigger(event) {
-        var ref, ref1;
-
-        for (var _len = arguments.length, args = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
-          args[_key - 1] = arguments[_key];
-        }
-
-        return (ref = this.callbacks) != null ? (ref1 = ref[event]) != null ? ref1.apply(this, args) : void 0 : void 0;
-      }
-    }, {
-      key: "applyOperation",
-      value: function applyOperation(operation) {
-        if (!operation.isNoop()) {
-          this.ignoreChanges = true;
-        }
-
-        this.applyOperationToACE(operation);
-        return this.ignoreChanges = false;
-      }
-    }, {
-      key: "registerUndo",
-      value: function registerUndo(undoFn) {
-        return this.ace.undo = undoFn;
-      }
-    }, {
-      key: "registerRedo",
-      value: function registerRedo(redoFn) {
-        return this.ace.redo = redoFn;
-      }
-    }, {
-      key: "invertOperation",
-      value: function invertOperation(operation) {
-        // TODO: Optimize to avoid copying entire text?
-        return operation.invert(this.getValue());
-      }
-    }]);
-
-    return ACEAdapter;
-  }();
-
-  ;
-  ACEAdapter.prototype.ignoreChanges = false;
-  return ACEAdapter;
-}.call(void 0);
 'use strict';
 
 /**
@@ -6093,160 +5694,6 @@ firepad.textPiecesToInserts = function(atNewLine, textPieces) {
 
 var firepad = firepad || { };
 
-/**
- * Instance of headless Firepad for use in NodeJS. Supports get/set on text/html.
- */
-firepad.Headless = (function() {
-  var TextOperation   = firepad.TextOperation;
-  var FirebaseAdapter = firepad.FirebaseAdapter;
-  var EntityManager   = firepad.EntityManager;
-  var ParseHtml       = firepad.ParseHtml;
-
-  function Headless(refOrPath) {
-    // Allow calling without new.
-    if (!(this instanceof Headless)) { return new Headless(refOrPath); }
-
-    var firebase, ref;
-    if (typeof refOrPath === 'string') {
-      if (window.firebase === undefined && typeof firebase !== 'object') {
-            console.log("REQUIRING");
-        firebase = require('firebase/app');
-        require('firebase/database');
-      } else {
-        firebase = window.firebase;
-      }
-
-      ref = firebase.database().refFromURL(refOrPath);
-    } else {
-      ref = refOrPath;
-    }
-
-    this.entityManager_  = new EntityManager();
-
-    this.firebaseAdapter_ = new FirebaseAdapter(ref);
-    this.ready_ = false;
-    this.zombie_ = false;
-  }
-
-  Headless.prototype.getDocument = function(callback) {
-    var self = this;
-
-    if (self.ready_) {
-      return callback(self.firebaseAdapter_.getDocument());
-    }
-
-    self.firebaseAdapter_.on('ready', function() {
-      self.ready_ = true;
-      callback(self.firebaseAdapter_.getDocument());
-    });
-  }
-
-  Headless.prototype.getText = function(callback) {
-    if (this.zombie_) {
-      throw new Error('You can\'t use a firepad.Headless after calling dispose()!');
-    }
-
-    this.getDocument(function(doc) {
-      var text = doc.apply('');
-
-      // Strip out any special characters from Rich Text formatting
-      for (var key in firepad.sentinelConstants) {
-        text = text.replace(new RegExp(firepad.sentinelConstants[key], 'g'), '');
-      }
-      callback(text);
-    });
-  }
-
-  Headless.prototype.setText = function(text, callback) {
-    if (this.zombie_) {
-      throw new Error('You can\'t use a firepad.Headless after calling dispose()!');
-    }
-
-    var op = TextOperation().insert(text);
-    this.sendOperationWithRetry(op, callback);
-  }
-
-  Headless.prototype.initializeFakeDom = function(callback) {
-    if (typeof document === 'object' || typeof firepad.document === 'object') {
-      callback();
-    } else {
-      const jsdom = require('jsdom');
-      const { JSDOM } = jsdom;
-      const { window } = new JSDOM("<head></head><body></body>");
-      if (firepad.document) {
-        // Return if we've already made a jsdom to avoid making more than one
-        // This would be easier with promises but we want to avoid introducing
-        // another dependency for just headless mode.
-        window.close();
-        return callback();
-      }
-      firepad.document = window.document;
-      callback();
-    }
-  }
-
-  Headless.prototype.getHtml = function(callback) {
-    var self = this;
-
-    if (this.zombie_) {
-      throw new Error('You can\'t use a firepad.Headless after calling dispose()!');
-    }
-
-    self.initializeFakeDom(function() {
-      self.getDocument(function(doc) {
-        callback(firepad.SerializeHtml(doc, self.entityManager_));
-      });
-    });
-  }
-
-  Headless.prototype.setHtml = function(html, callback) {
-    var self = this;
-
-    if (this.zombie_) {
-      throw new Error('You can\'t use a firepad.Headless after calling dispose()!');
-    }
-
-    self.initializeFakeDom(function() {
-      var textPieces = ParseHtml(html, self.entityManager_, self.codeMirror_);
-      var inserts    = firepad.textPiecesToInserts(true, textPieces);
-      var op         = new TextOperation();
-
-      for (var i = 0; i < inserts.length; i++) {
-        op.insert(inserts[i].string, inserts[i].attributes);
-      }
-
-      self.sendOperationWithRetry(op, callback);
-    });
-  }
-
-  Headless.prototype.sendOperationWithRetry = function(operation, callback) {
-    var self = this;
-
-    self.getDocument(function(doc) {
-      var op = operation.clone()['delete'](doc.targetLength);
-      self.firebaseAdapter_.sendOperation(op, function(err, committed) {
-        if (committed) {
-          if (typeof callback !== "undefined") {
-            callback(null, committed);
-          }
-        } else {
-          self.sendOperationWithRetry(operation, callback);
-        }
-      });
-    });
-  }
-
-  Headless.prototype.dispose = function() {
-    this.zombie_ = true; // We've been disposed.  No longer valid to do anything.
-
-    this.firebaseAdapter_.dispose();
-  };
-
-  return Headless;
-})();
-
-var firepad = firepad || { };
-
 firepad.Firepad = (function(global) {
   if (!firepad.RichTextCodeMirrorAdapter) {
     throw new Error("Oops! It looks like you're trying to include lib/firepad.js directly.  This is actually one of many source files that make up firepad.  You want dist/firepad.js instead.");
@@ -6254,7 +5701,6 @@ firepad.Firepad = (function(global) {
   var RichTextCodeMirrorAdapter = firepad.RichTextCodeMirrorAdapter;
   var RichTextCodeMirror = firepad.RichTextCodeMirror;
   var RichTextToolbar = firepad.RichTextToolbar;
-  var ACEAdapter = firepad.ACEAdapter;
   var MonacoAdapter = firepad.MonacoAdapter;
   var FirebaseAdapter = firepad.FirebaseAdapter;
   var EditorClient = firepad.EditorClient;
@@ -6281,12 +5727,6 @@ firepad.Firepad = (function(global) {
       if (curValue !== '') {
         throw new Error("Can't initialize Firepad with a CodeMirror instance that already contains text.");
       }
-    } else if (ace && place && place.session instanceof ace.EditSession) {
-      this.ace_ = this.editor_ = place;
-      curValue = this.ace_.getValue();
-      if (curValue !== '') {
-        throw new Error("Can't initialize Firepad with an ACE instance that already contains text.");
-      }
     } else if (global.monaco && place && place instanceof global.monaco.constructor) {
       monaco = global.monaco;
       this.monaco_ = this.editor_ = place;
@@ -6301,8 +5741,6 @@ firepad.Firepad = (function(global) {
     var editorWrapper;
     if (this.codeMirror_) {
       editorWrapper = this.codeMirror_.getWrapperElement();
-    } else if (this.ace_) {
-      editorWrapper = this.ace_.container;
     } else {
       editorWrapper = this.monaco_.getDomNode()
     }
@@ -6350,8 +5788,6 @@ firepad.Firepad = (function(global) {
     if (this.codeMirror_) {
       this.richTextCodeMirror_ = new RichTextCodeMirror(this.codeMirror_, this.entityManager_, { cssPrefix: 'firepad-' });
       this.editorAdapter_ = new RichTextCodeMirrorAdapter(this.richTextCodeMirror_);
-    } else if (this.ace_) {
-      this.editorAdapter_ = new ACEAdapter(this.ace_);
     } else {
       this.editorAdapter_ = new MonacoAdapter(this.monaco_);
     }
@@ -6371,9 +5807,6 @@ firepad.Firepad = (function(global) {
     this.firebaseAdapter_.on('ready', function() {
       self.ready_ = true;
 
-      if (this.ace_) {
-        this.editorAdapter_.grabDocumentState();
-      }
       if (this.monaco_) {
         this.editorAdapter_.grabDocumentState();
       }
@@ -6418,8 +5851,6 @@ firepad.Firepad = (function(global) {
     // var editorWrapper = this.codeMirror_ ? this.codeMirror_.getWrapperElement() : this.ace_.container;
     if (this.codeMirror_) {
         editorWrapper = this.codeMirror_.getWrapperElement();
-    } else if (this.ace_) {
-        editorWrapper = this.ace_.container;
     } else {
         editorWrapper = this.monaco_.getDomNode()
     }
@@ -6461,8 +5892,6 @@ firepad.Firepad = (function(global) {
     this.assertReady_('getText');
     if (this.codeMirror_)
       return this.richTextCodeMirror_.getText();
-    else if (this.ace_)
-      return this.ace_.getSession().getDocument().getValue();
     else
       return this.monaco_.getModel().getValue();
   };
@@ -6471,8 +5900,6 @@ firepad.Firepad = (function(global) {
       this.assertReady_('setText');
     if (this.monaco_) {
       return this.monaco_.getModel().setValue(textPieces);
-    } else if (this.ace_) {
-      return this.ace_.getSession().getDocument().setValue(textPieces);
     } else {
       // HACK: Hide CodeMirror during setText to prevent lots of extra renders.
       this.codeMirror_.getWrapperElement().setAttribute('style', 'display: none');
@@ -6489,7 +5916,6 @@ firepad.Firepad = (function(global) {
   };
 
   Firepad.prototype.insertText = function(index, textPieces) {
-    utils.assert(!this.ace_, "Not supported for ace yet.");
     utils.assert(!this.monaco_, "Not supported for monaco yet.");
     this.assertReady_('insertText');
 
@@ -6898,11 +6324,9 @@ firepad.Firepad.Entity = firepad.Entity;
 firepad.Firepad.LineFormatting = firepad.LineFormatting;
 firepad.Firepad.Line = firepad.Line;
 firepad.Firepad.TextOperation = firepad.TextOperation;
-firepad.Firepad.Headless = firepad.Headless;
 
 // Export adapters
 firepad.Firepad.RichTextCodeMirrorAdapter = firepad.RichTextCodeMirrorAdapter;
-firepad.Firepad.ACEAdapter = firepad.ACEAdapter;
 firepad.Firepad.MonacoAdapter = firepad.MonacoAdapter;
 
 return firepad.Firepad; }, this);
