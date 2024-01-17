@@ -3955,16 +3955,14 @@ firepad.RichTextCodeMirror = (function () {
 
 
   RichTextCodeMirror.prototype.cleanup = function() {
-    let lineCount = this.codeMirror.lineCount();
-    console.log('lineCount1: ', lineCount);
-
+    // set a timeout so we don't update the DOM in the middle of a CM update.
     setTimeout(() => {
+      let lineCount = this.codeMirror.lineCount();  
       if (lineCount > this.options_.maxLineCount) {
           this.codeMirror.replaceRange('', {line: this.options_.maxLineCount - 1, ch: 0}, {line: lineCount - 1, ch: 0});
           lineCount = this.codeMirror.lineCount();
       }
       lineCount = this.codeMirror.lineCount();
-      console.log('lineCount2: ', lineCount);
       const linesRemaining = this.options_.maxLineCount - lineCount;
       this.codeMirror.firepad.toolbar.updateLinesRemaining(linesRemaining);
     }, 10);
