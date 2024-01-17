@@ -3956,14 +3956,18 @@ firepad.RichTextCodeMirror = (function () {
 
   RichTextCodeMirror.prototype.cleanup = function() {
     let lineCount = this.codeMirror.lineCount();
-    if (lineCount > this.options_.maxLineCount) {
-      setTimeout(() => {
-        this.codeMirror.replaceRange('', {line: lineCount - 2, ch: 0}, {line: lineCount - 1, ch: 0});
-        lineCount = this.codeMirror.lineCount()
-      }, 10);
-    }
-    const linesRemaining = this.options_.maxLineCount - lineCount;
-    this.codeMirror.firepad.toolbar.updateLinesRemaining(linesRemaining);
+    console.log('lineCount1: ', lineCount);
+
+    setTimeout(() => {
+      if (lineCount > this.options_.maxLineCount) {
+          this.codeMirror.replaceRange('', {line: this.options_.maxLineCount - 1, ch: 0}, {line: lineCount - 1, ch: 0});
+          lineCount = this.codeMirror.lineCount();
+      }
+      lineCount = this.codeMirror.lineCount();
+      console.log('lineCount2: ', lineCount);
+      const linesRemaining = this.options_.maxLineCount - lineCount;
+      this.codeMirror.firepad.toolbar.updateLinesRemaining(linesRemaining);
+    }, 10);
   }
 
   RichTextCodeMirror.prototype.convertCoordinateSystemForChanges_ = function(changes) {
