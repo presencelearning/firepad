@@ -1826,11 +1826,22 @@ firepad.RichTextToolbar = (function(global) {
       toolbarOptions.push(utils.elt('div', [self.makeButton_('insert-image')], { 'class': 'firepad-btn-group' }));
     }
 
+    this.linesRemaining = utils.elt('div', '', { 'class': 'firepad-toolbar-linesremaining-label' });
+    toolbarOptions.push(this.linesRemaining);
+
     var toolbarWrapper = utils.elt('div', toolbarOptions, { 'class': 'firepad-toolbar-wrapper' });
     var toolbar = utils.elt('div', null, { 'class': 'firepad-toolbar' });
     toolbar.appendChild(toolbarWrapper)
 
     return toolbar;
+  };
+
+  RichTextToolbar.prototype.updateLinesRemaining= function(count) {
+    if (count < 10) {
+      this.linesRemaining.innerHTML = 'Lines remaining: ' + count;
+    } else {
+      this.linesRemaining.innerHTML = '';
+    }
   };
 
   RichTextToolbar.prototype.makeFontDropdown_ = function() {
@@ -3938,7 +3949,22 @@ firepad.RichTextCodeMirror = (function () {
     if (newChanges.length > 0) {
       this.trigger('change', this, newChanges);
     }
+
+    this.cleanup();
   };
+
+
+  RichTextCodeMirror.prototype.cleanup = function() {
+    let lineCount = this.codeMirror.lineCount();
+    if (lineCount > this.options_.maxLineCount) {
+      setTimeout(() => {
+        this.codeMirror.replaceRange('', {line: lineCount - 2, ch: 0}, {line: lineCount - 1, ch: 0});
+        lineCount = this.codeMirror.lineCount()
+      }, 10);
+    }
+    const linesRemaining = this.options_.maxLineCount - lineCount;
+    this.codeMirror.firepad.toolbar.updateLinesRemaining(linesRemaining);
+  }
 
   RichTextCodeMirror.prototype.convertCoordinateSystemForChanges_ = function(changes) {
     // We have to convert the positions in the pre-change coordinate system to indexes.
@@ -5768,6 +5794,7 @@ firepad.Firepad = (function(global) {
 
     this.imageInsertionUI = this.getOption('imageInsertionUI', true);
     this.showPrint = this.getOption('showPrint', true);
+    this.maxLineCount = this.getOption('maxLineCount', 1000);
 
     if (this.getOption('richTextToolbar', false)) {
       this.addToolbar_();
@@ -5786,7 +5813,7 @@ firepad.Firepad = (function(global) {
 
     this.firebaseAdapter_ = new FirebaseAdapter(ref, userId, userColor, userDisplayName);
     if (this.codeMirror_) {
-      this.richTextCodeMirror_ = new RichTextCodeMirror(this.codeMirror_, this.entityManager_, { cssPrefix: 'firepad-' });
+      this.richTextCodeMirror_ = new RichTextCodeMirror(this.codeMirror_, this.entityManager_, { cssPrefix: 'firepad-', maxLineCount: this.maxLineCount });
       this.editorAdapter_ = new RichTextCodeMirrorAdapter(this.richTextCodeMirror_);
     } else {
       this.editorAdapter_ = new MonacoAdapter(this.monaco_);
@@ -5855,8 +5882,6 @@ firepad.Firepad = (function(global) {
         editorWrapper = this.monaco_.getDomNode()
     }
 
-    console.log('dispose editorWrapper: ', editorWrapper);
-    console.log('dispose firepadWrapper_: ', this.firepadWrapper_);
     try {
         this.firepadWrapper_.removeChild(editorWrapper);
         this.firepadWrapper_.parentNode.replaceChild(editorWrapper, this.firepadWrapper_);
