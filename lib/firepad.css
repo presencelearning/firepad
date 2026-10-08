@@ -231,9 +231,20 @@ a.firepad-btn-highlight {
   background-color: #ffbf86;
 }
 
+.firepad-color-dropdown-option {
+  display: flex;
+  align-items: center;
+}
+
 .firepad-color-dropdown-item {
+  display: inline-block;
+  flex: none;
   height: 25px;
   width: 25px;
+}
+
+.firepad-color-dropdown-name {
+  margin-left: 8px;
 }
 
 .firepad-dialog {

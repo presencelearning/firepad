@@ -1900,15 +1900,31 @@ firepad.RichTextToolbar = (function(global) {
     return this.makeDropdown_('Size', 'font-size', items, 'px');
   };
 
-  RichTextToolbar.prototype.makeColorDropdown_ = function() {
-    var colors = ['#000000', '#747678', '#4D8BBE', '#85D4F7', '#D0021B', '#F9B417', '#78A240', '#B665A6', '#FF6C98'];
+  // Each colour has a name so it isn't conveyed by colour alone (WCAG 1.4.1):
+  // the name is shown next to the swatch and used as the item's label.
+  var COLORS_ = [
+    { value: '#000000', name: 'Black' },
+    { value: '#747678', name: 'Gray' },
+    { value: '#4D8BBE', name: 'Blue' },
+    { value: '#85D4F7', name: 'Sky blue' },
+    { value: '#D0021B', name: 'Red' },
+    { value: '#F9B417', name: 'Yellow' },
+    { value: '#78A240', name: 'Green' },
+    { value: '#B665A6', name: 'Purple' },
+    { value: '#FF6C98', name: 'Pink' }
+  ];
 
+  RichTextToolbar.prototype.makeColorDropdown_ = function() {
     var items = [];
-    for(var i = 0; i < colors.length; i++) {
-      var content = utils.elt('div');
-      content.className = 'firepad-color-dropdown-item';
-      content.setAttribute('style', 'background-color:' + colors[i]);
-      items.push({ content: content, value: colors[i] });
+    for(var i = 0; i < COLORS_.length; i++) {
+      var swatch = utils.elt('span', '', {
+        'class': 'firepad-color-dropdown-item',
+        'style': 'background-color:' + COLORS_[i].value,
+        'aria-hidden': 'true'
+      });
+      var name = utils.elt('span', COLORS_[i].name, { 'class': 'firepad-color-dropdown-name' });
+      var content = utils.elt('span', [swatch, name], { 'class': 'firepad-color-dropdown-option' });
+      items.push({ content: content, value: COLORS_[i].value, label: COLORS_[i].name });
     }
     return this.makeDropdown_('Color', 'color', items);
   };
@@ -1953,13 +1969,13 @@ firepad.RichTextToolbar = (function(global) {
       setTimeout(function() { justDismissed = false; }, 0);
     }
 
-    function addItem(content, value) {
+    function addItem(content, value, label) {
       if (typeof content !== 'object') {
         content = document.createTextNode(String(content));
       }
       var element = utils.elt('a', [content], {
         'role': 'button',
-        'aria-label': value,
+        'aria-label': label || value,
         'tabindex': '-1'
       });
 
@@ -1999,7 +2015,7 @@ firepad.RichTextToolbar = (function(global) {
 
     for(var i = 0; i < items.length; i++) {
       var content = items[i].content, value = items[i].value;
-      addItem(content, value);
+      addItem(content, value, items[i].label);
     }
 
     utils.on(button, 'click', utils.stopEventAnd(function() {
