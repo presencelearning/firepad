@@ -1786,16 +1786,23 @@ firepad.RichTextToolbar = (function(global) {
     return text.charAt(0).toUpperCase() + text.slice(1);
   }
 
+  var TOGGLE_BUTTONS_ = { bold: true, italic: true, underline: true, strike: true };
+
   RichTextToolbar.prototype.makeButton_ = function(eventName, iconName) {
     var self = this;
     iconName = iconName || eventName;
-    var btn = utils.elt('a', [utils.elt('span', '', { 'class': 'firepad-tb-' + iconName } )], {
+    var attrs = {
       'class': 'firepad-btn',
       'title': capitalize(eventName),
       'role': 'button',
       'aria-label': capitalize(eventName),
       'tabindex': '0'
-    });
+    };
+    // Only the formatting toggles have a pressed state. Other buttons are actions.
+    if (TOGGLE_BUTTONS_[eventName]) {
+      attrs['aria-pressed'] = 'false';
+    }
+    var btn = utils.elt('a', [utils.elt('span', '', { 'class': 'firepad-tb-' + iconName } )], attrs);
     utils.on(btn, 'click', utils.stopEventAnd(function() { self.trigger(eventName); }));
     utils.on(btn, 'keydown', function(e) {
       if (e.keyCode === 13 || e.keyCode === 32) { // Enter or Space
@@ -1913,6 +1920,7 @@ firepad.RichTextToolbar = (function(global) {
       'class': 'firepad-btn firepad-dropdown',
       'role': 'button',
       'aria-label': title,
+      'aria-expanded': 'false',
       'tabindex': '0'
     });
     var list = utils.elt('ul', [ ], { 'class': 'firepad-dropdown-menu' });
@@ -1922,6 +1930,7 @@ firepad.RichTextToolbar = (function(global) {
     function showDropdown() {
       if (!isShown) {
         list.style.display = 'block';
+        button.setAttribute('aria-expanded', 'true');
         utils.on(document, 'click', hideDropdown, /*capture=*/true);
         isShown = true;
         // If triggered by keyboard, focus first item
@@ -1935,6 +1944,7 @@ firepad.RichTextToolbar = (function(global) {
     function hideDropdown() {
       if (isShown) {
         list.style.display = '';
+        button.setAttribute('aria-expanded', 'false');
         utils.off(document, 'click', hideDropdown, /*capture=*/true);
         isShown = false;
       }
@@ -4380,12 +4390,17 @@ firepad.RichTextCodeMirror = (function () {
 
     if (toolbar.updateToolbarButnsStateTimeout) clearTimeout(toolbar.updateToolbarButnsStateTimeout);
     toolbar.updateToolbarButnsStateTimeout = setTimeout(function() {
-      toggleClass(toolbar.boldBtnElem, 'firepad-btn-highlight', attr.b === true);
-      toggleClass(toolbar.italicBtnElem, 'firepad-btn-highlight', attr.i === true);
-      toggleClass(toolbar.underlineBtnElem, 'firepad-btn-highlight', attr.u === true);
-      toggleClass(toolbar.strikeBtnElem, 'firepad-btn-highlight', attr.s === true);
+      setPressed(toolbar.boldBtnElem, attr.b === true);
+      setPressed(toolbar.italicBtnElem, attr.i === true);
+      setPressed(toolbar.underlineBtnElem, attr.u === true);
+      setPressed(toolbar.strikeBtnElem, attr.s === true);
     }, 100);
   };
+
+  function setPressed(elem, pressed) {
+    toggleClass(elem, 'firepad-btn-highlight', pressed);
+    elem.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+  }
 
   // If newState is provided add/remove theClass accordingly, otherwise toggle theClass
   function toggleClass(elem, theClass, newState) {
