@@ -76,4 +76,42 @@ describe('RichTextToolbar ARIA', function() {
       expect(trigger.getAttribute('aria-expanded')).toBe('false');
     });
   });
+
+  describe('Color dropdown names', function() {
+    var NAMES = ['Black', 'Gray', 'Blue', 'Sky blue', 'Red', 'Yellow', 'Green', 'Purple', 'Pink'];
+
+    function colorItems() {
+      var menu = button('Color').querySelector('.firepad-dropdown-menu');
+      return Array.prototype.slice.call(menu.children);
+    }
+
+    it('labels each colour by name instead of its hex value', function() {
+      expect(colorItems().map(function(item) {
+        return item.getAttribute('aria-label');
+      })).toEqual(NAMES);
+    });
+
+    it('shows each colour name next to its swatch', function() {
+      colorItems().forEach(function(item, i) {
+        var swatch = item.querySelector('.firepad-color-dropdown-item');
+        var name = item.querySelector('.firepad-color-dropdown-name');
+        expect(swatch.getAttribute('aria-hidden')).toBe('true');
+        expect(name.textContent).toBe(NAMES[i]);
+      });
+    });
+
+    it('still applies the hex value when a named colour is chosen', function() {
+      var chosen = [];
+      toolbar.on('color', function(value) { chosen.push(value); });
+
+      button('Color').click();
+      colorItems()[3].click();
+
+      expect(chosen).toEqual(['#85D4F7']);
+    });
+
+    it('keeps the value as the label for items without a name', function() {
+      expect(button('Size').querySelector('.firepad-dropdown-menu a').getAttribute('aria-label')).toBe('9');
+    });
+  });
 });
